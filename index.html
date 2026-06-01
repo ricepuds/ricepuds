@@ -67,26 +67,6 @@
             로그인 없이 바로 열람할 수 있습니다.
           </p>
         </div>
-
-        <div class="hero-visual" aria-label="인기 실험 랭킹">
-          <span class="lab-shape lab-shape-a" aria-hidden="true"></span>
-          <span class="lab-shape lab-shape-b" aria-hidden="true"></span>
-          <a class="rank-card rank-card-two" href="#prep-room" data-open-prep data-area="시약">
-            <span>화학</span>
-            <strong>촉매가 바꾸는<br>반응속도</strong>
-            <em>2</em>
-          </a>
-          <a class="rank-card rank-card-one" href="#prep-room" data-open-prep data-area="화학실">
-            <span>물리</span>
-            <strong>빛으로 그리는<br>스펙트럼</strong>
-            <em>1</em>
-          </a>
-          <a class="rank-card rank-card-three" href="#prep-room" data-open-prep data-area="생명실">
-            <span>생명</span>
-            <strong>현미경 속<br>작은 세계</strong>
-            <em>3</em>
-          </a>
-        </div>
       </div>
     </section>
 
@@ -345,6 +325,48 @@
 
   <div class="toast" role="status" aria-live="polite"></div>
 
+  <div class="modal-overlay item-detail-modal" id="item-detail-modal" hidden>
+    <section class="item-inspector item-detail-window" id="item-inspector" role="dialog" aria-modal="true" aria-labelledby="inspector-name" aria-describedby="inspector-detail-text">
+      <header class="modal-header item-detail-header">
+        <div>
+          <p class="modal-kicker" id="inspector-area">보관 위치</p>
+          <h2 id="inspector-name">물품명</h2>
+        </div>
+        <button type="button" class="modal-close" data-item-detail-close aria-label="닫기">×</button>
+      </header>
+
+      <div class="item-detail-body">
+        <div class="inspector-copy">
+          <dl class="inspector-details">
+            <div>
+              <dt>분류</dt>
+              <dd id="inspector-category">-</dd>
+            </div>
+            <div>
+              <dt>위치</dt>
+              <dd id="inspector-location">-</dd>
+            </div>
+            <div>
+              <dt>수량</dt>
+              <dd id="inspector-quantity">-</dd>
+            </div>
+            <div>
+              <dt>상태</dt>
+              <dd id="inspector-status">-</dd>
+            </div>
+          </dl>
+
+          <p class="inspector-detail-text" id="inspector-detail-text">-</p>
+          <p class="inspector-source" id="inspector-source">-</p>
+        </div>
+
+        <div class="inspector-visual">
+          <div class="cabinet-scene" id="cabinet-scene" aria-label="3D 보관 위치"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <div class="modal-overlay" id="login-modal" hidden>
     <div class="modal-content auth-modal-content" role="dialog" aria-labelledby="modal-title">
       <header class="modal-header">
@@ -385,7 +407,7 @@
         <div>
           <p class="modal-kicker">My Account</p>
           <h2 id="account-modal-title">내 계정</h2>
-          <p class="modal-subtitle">현재 로그인된 Supabase 계정입니다.</p>
+          <p class="modal-subtitle">현재 로그인된 계정입니다.</p>
         </div>
         <button type="button" class="modal-close" id="close-account-modal" aria-label="닫기">×</button>
       </header>
@@ -481,6 +503,7 @@
   <script src="auth.js"></script>
   <script src="data/reagents.js"></script>
   <script src="data/lab-items.js"></script>
+  <script src="vendor/three.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

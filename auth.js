@@ -198,6 +198,11 @@ function initAuth() {
     const isAdmin = isAdminEmail(email);
     const initial = getAccountInitial(email);
 
+    document.body.classList.toggle("is-admin", isAdmin);
+    window.dispatchEvent(new CustomEvent("science-lab-auth-change", {
+      detail: { email, isAdmin, isSignedIn: Boolean(user) },
+    }));
+
     if (loginBtn) {
       loginBtn.hidden = Boolean(user);
     }
