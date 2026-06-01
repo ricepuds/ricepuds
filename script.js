@@ -278,7 +278,7 @@ function createCabinetViewer(container) {
   renderer.domElement.setAttribute("aria-hidden", "true");
   container.append(renderer.domElement);
 
-  camera.position.set(0, 0.25, 8);
+  camera.position.set(0, 0.25, 9);
   camera.lookAt(0, 0.02, 0);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x273747, 1.45));
 
@@ -412,7 +412,7 @@ function createCabinetViewer(container) {
       group.add(floor);
       addPrepRoomLayout(model);
       camera.up.set(0, 1, 0);
-      camera.position.set(0, 0.35, 12.2);
+      camera.position.set(0, 0.25, 9);
       camera.lookAt(0, 0.02, 0);
       targetRotation = 0.16;
       resize();
@@ -420,7 +420,7 @@ function createCabinetViewer(container) {
     }
 
     camera.up.set(0, 1, 0);
-    camera.position.set(0, 0.25, 8);
+    camera.position.set(0, 0.25, 9);
     camera.lookAt(0, 0.02, 0);
 
     const range = getVisibleCabinetRange(model);
@@ -434,6 +434,7 @@ function createCabinetViewer(container) {
       addCabinet(x, number, model, number === model.cabinetNumber);
     }
 
+    camera.position.set(0, 0.25, 9);
     targetRotation = model.cabinetNumber % 2 === 0 ? -0.28 : 0.22;
     resize();
   }
