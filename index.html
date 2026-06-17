@@ -17,7 +17,7 @@
     <nav class="site-nav" aria-label="주요 메뉴">
       <a class="is-active" href="#">NOW</a>
       <a href="#spaces">실험실</a>
-      <a href="#" data-soon>AI탐구</a>
+      <a href="#" id="nav-about-open">공지</a>
       <a href="#prep-room" data-open-prep data-area="전체">자료실</a>
       <a href="#" data-reservation-open>예약</a>
     </nav>
@@ -321,6 +321,52 @@
         </div>
       </div>
     </section>
+
+    <!-- 공지 & 제작진 전체 화면 (About Page) -->
+    <section class="about-page" id="about-page" hidden>
+      <div class="about-page-shell">
+        <!-- 공지사항 섹션 -->
+        <section class="about-page-section">
+          <h2>📢 공지사항</h2>
+          <div class="about-page-notice-box" id="about-page-notice-box">
+            <!-- JavaScript에서 동적으로 공지사항 목록 로드 -->
+          </div>
+        </section>
+
+        <!-- 제작진 섹션 -->
+        <section class="about-page-section">
+          <h2>👥 제작진</h2>
+          <div class="creators-grid">
+            <div class="creator-card">
+              <div class="creator-avatar" style="background: #1b6b5f;">교</div>
+              <div class="creator-info">
+                <strong>김오송 교사</strong>
+                <span>기획 & 지도</span>
+                <small>오송고등학교 과학부</small>
+              </div>
+            </div>
+            
+            <div class="creator-card">
+              <div class="creator-avatar" style="background: #2b8d92;">랩</div>
+              <div class="creator-info">
+                <strong>이과학 학생</strong>
+                <span>메인 개발 (Frontend)</span>
+                <small>과학 동아리 사이언스 랩크루</small>
+              </div>
+            </div>
+
+            <div class="creator-card">
+              <div class="creator-avatar" style="background: #e85f45;">디</div>
+              <div class="creator-info">
+                <strong>박화학 학생</strong>
+                <span>UI/UX 디자인</span>
+                <small>과학 동아리 사이언스 랩크루</small>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <div class="toast" role="status" aria-live="polite"></div>
@@ -443,61 +489,105 @@
       <header class="modal-header">
         <div>
           <p class="modal-kicker">Science Lab Reservation</p>
-          <h2 id="reservation-modal-title">과학실 예약</h2>
-          <p class="modal-subtitle">사용할 공간과 시간을 선택해 예약 요청을 남깁니다.</p>
+          <h2 id="reservation-modal-title">과학실 예약 및 안내</h2>
+          <p class="modal-subtitle">안내 사항을 확인하고 공간 예약을 진행해 주세요.</p>
         </div>
         <button type="button" class="modal-close" data-reservation-close aria-label="닫기">×</button>
       </header>
 
-      <form id="reservation-form" class="modal-form reservation-form">
-        <div class="reservation-grid">
-          <div class="form-group">
-            <label for="reservation-room">공간</label>
-            <select id="reservation-room" name="room" required>
-              <option value="화학실">화학실</option>
-              <option value="생명실">생명실</option>
-              <option value="준비실">준비실</option>
-              <option value="전체 과학실">전체 과학실</option>
-            </select>
+      <!-- 모바일 전환용 탭 버튼 (모바일 화면에서 노출) -->
+      <div class="reservation-tabs" id="reservation-tabs" aria-label="예약 모달 탭">
+        <button type="button" class="reservation-tab is-active" data-res-tab="notices">안내 및 현황</button>
+        <button type="button" class="reservation-tab" data-res-tab="form">예약 신청</button>
+      </div>
+
+      <div class="reservation-modal-body">
+        <!-- 공지사항 및 현황 패널 (좌측 열) -->
+        <aside class="reservation-notice-section" id="reservation-notice-section">
+          <div class="notice-inner-tabs">
+            <button type="button" class="notice-tab-btn is-active" data-notice-tab="board">공지사항</button>
+            <button type="button" class="notice-tab-btn" data-notice-tab="status">예약 현황</button>
+          </div>
+
+          <!-- 공지사항 탭 -->
+          <div class="notice-tab-content" id="notice-tab-board">
+            <div class="notice-list-container" id="notice-list-container">
+              <!-- JavaScript에서 렌더링 -->
+            </div>
+            <!-- 관리자용 공지 작성 폼 -->
+            <form id="admin-notice-form" class="admin-notice-form" hidden>
+              <input type="text" id="admin-notice-input" placeholder="새 공지사항을 입력하세요..." required>
+              <button type="submit">등록</button>
+            </form>
+          </div>
+
+          <!-- 예약현황 탭 -->
+          <div class="notice-tab-content" id="notice-tab-status" hidden>
+            <div class="reservation-admin-panel" id="reservation-admin-panel">
+              <header>
+                <h3>접수된 예약 요청</h3>
+                <button type="button" class="reservation-clear" id="reservation-clear-btn">전체 삭제</button>
+              </header>
+              <div class="reservation-list" id="reservation-list">
+                <!-- JavaScript에서 렌더링 -->
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 예약 신청 폼 (우측 열) -->
+        <form id="reservation-form" class="modal-form reservation-form">
+          <div class="reservation-grid">
+            <div class="form-group">
+              <label for="reservation-room">공간</label>
+              <select id="reservation-room" name="room" required>
+                <option value="화학실">화학실</option>
+                <option value="생명실">생명실</option>
+                <option value="준비실">준비실</option>
+                <option value="전체 과학실">전체 과학실</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-date">날짜</label>
+              <input type="date" id="reservation-date" name="date" required>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-time">시간</label>
+              <select id="reservation-time" name="time" required>
+                <option value="1교시">1교시</option>
+                <option value="2교시">2교시</option>
+                <option value="3교시">3교시</option>
+                <option value="4교시">4교시</option>
+                <option value="5교시">5교시</option>
+                <option value="6교시">6교시</option>
+                <option value="7교시">7교시</option>
+                <option value="방과후">방과후</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-class">학급/동아리</label>
+              <input type="text" id="reservation-class" name="className" placeholder="예: 2학년 3반">
+            </div>
           </div>
 
           <div class="form-group">
-            <label for="reservation-date">날짜</label>
-            <input type="date" id="reservation-date" name="date" required>
+            <label for="reservation-purpose">사용 목적</label>
+            <textarea id="reservation-purpose" name="purpose" rows="4" placeholder="실험명이나 필요한 준비물을 적어주세요."></textarea>
           </div>
 
-          <div class="form-group">
-            <label for="reservation-time">시간</label>
-            <select id="reservation-time" name="time" required>
-              <option value="1교시">1교시</option>
-              <option value="2교시">2교시</option>
-              <option value="3교시">3교시</option>
-              <option value="4교시">4교시</option>
-              <option value="5교시">5교시</option>
-              <option value="6교시">6교시</option>
-              <option value="7교시">7교시</option>
-              <option value="방과후">방과후</option>
-            </select>
+          <div class="modal-actions modal-actions-split">
+            <button type="button" class="button secondary" data-reservation-close>닫기</button>
+            <button type="submit" class="button primary">예약 요청</button>
           </div>
-
-          <div class="form-group">
-            <label for="reservation-class">학급/동아리</label>
-            <input type="text" id="reservation-class" name="className" placeholder="예: 2학년 3반">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="reservation-purpose">사용 목적</label>
-          <textarea id="reservation-purpose" name="purpose" rows="4" placeholder="실험명이나 필요한 준비물을 적어주세요."></textarea>
-        </div>
-
-        <div class="modal-actions modal-actions-split">
-          <button type="button" class="button secondary" data-reservation-close>닫기</button>
-          <button type="submit" class="button primary">예약 요청</button>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   </div>
+
+
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="auth.js"></script>

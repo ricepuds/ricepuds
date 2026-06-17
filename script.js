@@ -8,6 +8,14 @@ const reservationDateInput = document.querySelector("#reservation-date");
 const reservationAdminPanel = document.querySelector("#reservation-admin-panel");
 const reservationList = document.querySelector("#reservation-list");
 const reservationClearButton = document.querySelector("#reservation-clear-btn");
+const noticeListContainer = document.querySelector("#notice-list-container");
+const adminNoticeForm = document.querySelector("#admin-notice-form");
+const adminNoticeInput = document.querySelector("#admin-notice-input");
+const reservationTabs = document.querySelector("#reservation-tabs");
+const resModalBody = document.querySelector(".reservation-modal-body");
+const aboutPage = document.querySelector("#about-page");
+const aboutPageNoticeBox = document.querySelector("#about-page-notice-box");
+const navAboutOpen = document.querySelector("#nav-about-open");
 const itemDetailModal = document.querySelector("#item-detail-modal");
 const itemDetailCloseButtons = document.querySelectorAll("[data-item-detail-close]");
 const spaceCards = document.querySelectorAll("[data-space-card]");
@@ -912,16 +920,158 @@ function isReservationAdmin() {
   return document.body.classList.contains("is-admin");
 }
 
+/* ==========================================
+   Notice Panel Logic & Storage
+   ========================================== */
+
+const NOTICE_STORAGE_KEY = "science-lab-notices";
+const DEFAULT_NOTICES = [
+  {
+    id: "notice-1",
+    content: "🧪 과학실 사용 전 예약은 최소 3일 전까지 완료해 주세요.",
+    createdAt: "2026. 6. 1. 오전 10:00"
+  },
+  {
+    id: "notice-2",
+    content: "⚠️ 실험 중 유독성 물질 사용 시 반드시 보안경과 실험용 장갑을 착용해 주세요.",
+    createdAt: "2026. 6. 1. 오전 10:05"
+  },
+  {
+    id: "notice-3",
+    content: "🧹 실험이 끝난 후 물품 정돈 및 전기/가스 차단 여부를 꼭 점검해 주세요.",
+    createdAt: "2026. 6. 1. 오전 10:10"
+  }
+];
+
+function getSavedNotices() {
+  try {
+    const data = localStorage.getItem(NOTICE_STORAGE_KEY);
+    if (!data) {
+      localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(DEFAULT_NOTICES));
+      return DEFAULT_NOTICES;
+    }
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : DEFAULT_NOTICES;
+  } catch {
+    return DEFAULT_NOTICES;
+  }
+}
+
+function saveNotices(notices) {
+  try {
+    localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(notices));
+  } catch {
+    showToast("공지사항을 저장하지 못했습니다.");
+  }
+}
+
+function renderAboutPageNotices() {
+  if (!aboutPageNoticeBox) return;
+
+  const notices = getSavedNotices();
+
+  if (!notices.length) {
+    aboutPageNoticeBox.innerHTML = `
+      <p class="notice-empty">등록된 공지사항이 없습니다.</p>
+    `;
+    return;
+  }
+
+  aboutPageNoticeBox.innerHTML = notices
+    .map((notice) => `
+      <div class="about-page-notice-item">
+        <p class="about-page-notice-content">${escapeHtml(notice.content)}</p>
+        <span class="about-page-notice-date">${escapeHtml(notice.createdAt)}</span>
+      </div>
+    `)
+    .join("");
+}
+
+function renderNotices() {
+  renderAboutPageNotices();
+
+  if (!noticeListContainer) {
+    return;
+  }
+
+  const isAdmin = isReservationAdmin();
+
+  if (adminNoticeForm) {
+    adminNoticeForm.hidden = !isAdmin;
+  }
+
+  const notices = getSavedNotices();
+
+  if (!notices.length) {
+    noticeListContainer.innerHTML = `
+      <p class="notice-empty">등록된 공지사항이 없습니다.</p>
+    `;
+    return;
+  }
+
+  noticeListContainer.innerHTML = notices
+    .map((notice) => `
+      <article class="notice-item" data-notice-id="${escapeHtml(notice.id)}">
+        <p class="notice-item-content">${escapeHtml(notice.content)}</p>
+        <small class="notice-item-meta">${escapeHtml(notice.createdAt)}</small>
+        <button type="button" class="notice-delete-btn" aria-label="공지 삭제" data-notice-delete>×</button>
+      </article>
+    `)
+    .join("");
+
+  // Attach delete buttons events
+  noticeListContainer.querySelectorAll("[data-notice-delete]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const noticeItem = e.target.closest("[data-notice-id]");
+      if (noticeItem) {
+        const id = noticeItem.dataset.noticeId;
+        deleteNotice(id);
+      }
+    });
+  });
+}
+
+function addNotice(content) {
+  if (!content.trim()) return;
+  const notices = getSavedNotices();
+  const createdAt = new Date().toLocaleString("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  notices.push({
+    id: `notice-${Date.now()}`,
+    content: content.trim(),
+    createdAt
+  });
+
+  saveNotices(notices);
+  renderNotices();
+  showToast("새 공지사항이 등록되었습니다.");
+}
+
+function deleteNotice(id) {
+  let notices = getSavedNotices();
+  notices = notices.filter((n) => n.id !== id);
+  saveNotices(notices);
+  renderNotices();
+  showToast("공지사항이 삭제되었습니다.");
+}
+
+/* ==========================================
+   Reservation Status & Tabs Logic
+   ========================================== */
+
 function renderReservationAdminPanel() {
   if (!reservationAdminPanel || !reservationList) {
     return;
   }
 
   const isAdmin = isReservationAdmin();
-  reservationAdminPanel.hidden = !isAdmin;
 
-  if (!isAdmin) {
-    return;
+  if (reservationClearButton) {
+    reservationClearButton.hidden = !isAdmin;
   }
 
   const reservations = getSavedReservations();
@@ -952,10 +1102,34 @@ function openReservationModal() {
     return;
   }
 
+  // Reset inner tabs inside notices panel to "board" (Notices)
+  document.querySelectorAll(".notice-tab-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.noticeTab === "board");
+  });
+  const tabBoard = document.querySelector("#notice-tab-board");
+  const tabStatus = document.querySelector("#notice-tab-status");
+  if (tabBoard) tabBoard.hidden = false;
+  if (tabStatus) tabStatus.hidden = true;
+
+  // Reset mobile tabs to "notices"
+  if (reservationTabs) {
+    reservationTabs.querySelectorAll(".reservation-tab").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.resTab === "notices");
+    });
+  }
+  if (resModalBody) {
+    resModalBody.className = "reservation-modal-body show-notices";
+  }
+
   renderReservationAdminPanel();
+  renderNotices();
+
   reservationModal.hidden = false;
   document.body.style.overflow = "hidden";
-  reservationDateInput?.focus();
+
+  if (window.innerWidth > 768) {
+    reservationDateInput?.focus();
+  }
 }
 
 function closeReservationModal() {
@@ -1039,7 +1213,49 @@ reservationClearButton?.addEventListener("click", () => {
   showToast("예약 요청 목록을 정리했습니다.");
 });
 
-window.addEventListener("science-lab-auth-change", renderReservationAdminPanel);
+// Admin notice form submit
+adminNoticeForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (adminNoticeInput) {
+    addNotice(adminNoticeInput.value);
+    adminNoticeInput.value = "";
+  }
+});
+
+// Inner tabs click handler (Notices vs Reservation Status)
+document.querySelectorAll(".notice-tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tabName = btn.dataset.noticeTab;
+    document.querySelectorAll(".notice-tab-btn").forEach((b) => {
+      b.classList.toggle("is-active", b === btn);
+    });
+
+    const tabBoard = document.querySelector("#notice-tab-board");
+    const tabStatus = document.querySelector("#notice-tab-status");
+    if (tabBoard) tabBoard.hidden = tabName !== "board";
+    if (tabStatus) tabStatus.hidden = tabName !== "status";
+  });
+});
+
+// Mobile responsive tabs click handler (Notices panel vs Reservation Form)
+reservationTabs?.addEventListener("click", (event) => {
+  const tabBtn = event.target.closest("[data-res-tab]");
+  if (!tabBtn) return;
+
+  reservationTabs.querySelectorAll(".reservation-tab").forEach((btn) => {
+    btn.classList.toggle("is-active", btn === tabBtn);
+  });
+
+  const tabType = tabBtn.dataset.resTab;
+  if (resModalBody) {
+    resModalBody.className = `reservation-modal-body show-${tabType}`;
+  }
+});
+
+window.addEventListener("science-lab-auth-change", () => {
+  renderReservationAdminPanel();
+  renderNotices();
+});
 
 openPrepLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
@@ -1150,19 +1366,108 @@ resetFiltersButton.addEventListener("click", () => {
 
 closePrepButton.addEventListener("click", closePrepRoom);
 
+/* ==========================================
+   About Page Event Handlers & Routing
+   ========================================== */
+
+function openAboutPage(options = {}) {
+  if (!aboutPage) return;
+
+  // Close prep room if open
+  closePrepRoom({ fromHistory: true });
+
+  // Hide home sections
+  const hero = document.querySelector(".hero");
+  const spaces = document.querySelector(".spaces");
+  if (hero) hero.style.display = "none";
+  if (spaces) spaces.style.display = "none";
+
+  // Show about page
+  aboutPage.hidden = false;
+  renderAboutPageNotices();
+
+  // Set active nav link
+  document.querySelectorAll(".site-nav a").forEach((link) => {
+    link.classList.toggle("is-active", link.id === "nav-about-open");
+  });
+
+  if (options.pushHistory !== false) {
+    try {
+      if (history.state?.view !== "about") {
+        history.pushState({ view: "about" }, "", "#about");
+      }
+    } catch {
+      // Local environments might restrict history
+    }
+  }
+}
+
+function closeAboutPage() {
+  if (!aboutPage) return;
+
+  aboutPage.hidden = true;
+
+  // Restore home sections
+  const hero = document.querySelector(".hero");
+  const spaces = document.querySelector(".spaces");
+  if (hero) hero.style.display = "";
+  if (spaces) spaces.style.display = "";
+
+  // Reset active nav link
+  document.querySelectorAll(".site-nav a").forEach((link) => {
+    const isNow = link.getAttribute("href") === "#" && !link.id;
+    link.classList.toggle("is-active", isNow);
+  });
+}
+
+// Nav link click event wiring
+document.querySelectorAll(".site-nav a").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    const href = link.getAttribute("href");
+    const id = link.id;
+
+    if (id === "nav-about-open") {
+      event.preventDefault();
+      openAboutPage();
+    } else if (href === "#") {
+      event.preventDefault();
+      closeAboutPage();
+      closePrepRoom();
+      try {
+        history.pushState({ view: "home" }, "", "#");
+      } catch {}
+    } else if (href === "#spaces") {
+      closeAboutPage();
+      closePrepRoom();
+    }
+  });
+});
+
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && itemDetailModal && !itemDetailModal.hidden) {
-    closeItemDetailModal();
+  if (event.key === "Escape") {
+    if (itemDetailModal && !itemDetailModal.hidden) {
+      closeItemDetailModal();
+    }
+    if (reservationModal && !reservationModal.hidden) {
+      closeReservationModal();
+    }
   }
 });
 
 window.addEventListener("popstate", (event) => {
   if (event.state?.view === "prep") {
     openInventoryView(filterState.area, { pushHistory: false, reset: false });
+    closeAboutPage();
+    return;
+  }
+
+  if (event.state?.view === "about") {
+    openAboutPage({ pushHistory: false });
     return;
   }
 
   closePrepRoom({ fromHistory: true });
+  closeAboutPage();
 });
 
 themeToggleButtons.forEach((button) => {
@@ -1182,3 +1487,10 @@ try {
 buildInventoryItems();
 setTheme(savedTheme);
 renderDashboard();
+
+// Initial routing check on load
+if (window.location.hash === "#prep-room") {
+  openInventoryView("시약", { pushHistory: false });
+} else if (window.location.hash === "#about") {
+  openAboutPage({ pushHistory: false });
+}
