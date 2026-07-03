@@ -3777,78 +3777,74 @@ body.is-admin .notice-delete-btn {
   font-weight: 600;
 }
 
-.creators-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-
-.creator-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: #171718;
-  border: 1px solid #2f2f31;
-  border-radius: 12px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.creator-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-  background: #202022;
-  border-color: #3e3e42;
-}
-
-.creator-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
-.creator-info {
+.credits-board {
+  min-height: 260px;
+  padding: 18px 10px 34px;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  align-items: center;
+  color: #d9d9de;
 }
 
-.creator-info strong {
-  color: #ffffff;
-  font-size: 1.05rem;
-  font-weight: 800;
+.credit-lead,
+.credit-support {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
-.creator-info span {
-  color: #38bdf8;
-  font-size: 0.84rem;
+.credit-lead {
+  gap: 16px;
+}
+
+.credit-support {
+  margin-top: 74px;
+  gap: 34px;
+}
+
+.credit-lead span,
+.credit-support span {
+  color: #c9c9cf;
+  font-size: 0.88rem;
   font-weight: 700;
-  margin-top: 4px;
 }
 
-.creator-info small {
-  color: #9898a0;
-  font-size: 0.78rem;
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.credit-lead strong,
+.credit-names strong {
+  color: #f2f2f5;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.credit-names {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(56px, 1fr));
+  align-items: center;
+  gap: 24px;
 }
 
 @media (max-width: 768px) {
   .about-page {
     padding: 24px 16px;
   }
-  
-  .creators-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+
+  .credits-board {
+    min-height: 240px;
+    padding-inline: 0;
+  }
+
+  .credit-support {
+    margin-top: 56px;
+    gap: 28px;
+  }
+
+  .credit-names {
+    grid-template-columns: repeat(2, minmax(80px, 1fr));
+    row-gap: 28px;
   }
 }
