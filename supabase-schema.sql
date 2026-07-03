@@ -19,6 +19,12 @@ create table if not exists public.science_lab_notices (
 alter table public.science_lab_reservations enable row level security;
 alter table public.science_lab_notices enable row level security;
 
+grant usage on schema public to anon, authenticated;
+grant select, insert on public.science_lab_reservations to anon, authenticated;
+grant delete on public.science_lab_reservations to authenticated;
+grant select on public.science_lab_notices to anon, authenticated;
+grant insert, delete on public.science_lab_notices to authenticated;
+
 drop policy if exists "Anyone can read science lab reservations" on public.science_lab_reservations;
 create policy "Anyone can read science lab reservations"
   on public.science_lab_reservations

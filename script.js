@@ -1005,59 +1005,59 @@ async function loadSupabaseReservations() {
 async function addReservation(reservation) {
   const client = getSupabaseStorageClient();
 
-  if (client) {
-    try {
-      const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).insert({
-        id: reservation.id,
-        room: reservation.room,
-        date: reservation.date,
-        time: reservation.time,
-        class_name: reservation.className,
-        purpose: reservation.purpose,
-        created_at: reservation.createdAt,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      reservationStorageMode = "supabase";
-      reservationCache = [reservation, ...reservationCache].slice(0, 30);
-      return true;
-    } catch (error) {
-      console.warn("Supabase reservation insert failed", error);
-      showToast("Supabase 저장에 실패해 이 브라우저에 임시 저장합니다.");
-    }
+  if (!client) {
+    showToast("Supabase 연결이 없어 예약을 저장하지 못했습니다.");
+    return false;
   }
 
-  const reservations = getSavedReservations();
-  reservations.unshift(reservation);
-  saveReservations(reservations.slice(0, 30));
-  return false;
+  try {
+    const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).insert({
+      id: reservation.id,
+      room: reservation.room,
+      date: reservation.date,
+      time: reservation.time,
+      class_name: reservation.className,
+      purpose: reservation.purpose,
+      created_at: reservation.createdAt,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    reservationStorageMode = "supabase";
+    reservationCache = [reservation, ...reservationCache].slice(0, 30);
+    return true;
+  } catch (error) {
+    console.warn("Supabase reservation insert failed", error);
+    showToast("Supabase 예약 저장에 실패했습니다. 테이블/RLS 설정을 확인해 주세요.");
+    return false;
+  }
 }
 
 async function clearReservations() {
   const client = getSupabaseStorageClient();
 
-  if (client && reservationStorageMode === "supabase") {
-    try {
-      const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).delete().neq("id", "");
-
-      if (error) {
-        throw error;
-      }
-
-      reservationCache = [];
-      return true;
-    } catch (error) {
-      console.warn("Supabase reservation clear failed", error);
-      showToast("Supabase 예약 목록을 비우지 못했습니다.");
-      return false;
-    }
+  if (!client) {
+    showToast("Supabase 연결이 없어 예약 목록을 비우지 못했습니다.");
+    return false;
   }
 
-  saveReservations([]);
-  return true;
+  try {
+    const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).delete().neq("id", "");
+
+    if (error) {
+      throw error;
+    }
+
+    reservationStorageMode = "supabase";
+    reservationCache = [];
+    return true;
+  } catch (error) {
+    console.warn("Supabase reservation clear failed", error);
+    showToast("Supabase 예약 목록을 비우지 못했습니다.");
+    return false;
+  }
 }
 
 function isReservationAdmin() {
@@ -1154,6 +1154,7 @@ async function saveNoticeToSupabase(notice) {
   const client = getSupabaseStorageClient();
 
   if (!client) {
+    showToast("Supabase 연결이 없어 공지를 저장하지 못했습니다.");
     return false;
   }
 
@@ -1172,7 +1173,7 @@ async function saveNoticeToSupabase(notice) {
     return true;
   } catch (error) {
     console.warn("Supabase notice insert failed", error);
-    showToast("Supabase 공지 저장에 실패해 이 브라우저에 임시 저장합니다.");
+    showToast("Supabase 공지 저장에 실패했습니다. 로그인/RLS 설정을 확인해 주세요.");
     return false;
   }
 }
@@ -1180,7 +1181,8 @@ async function saveNoticeToSupabase(notice) {
 async function deleteNoticeFromSupabase(id) {
   const client = getSupabaseStorageClient();
 
-  if (!client || noticeStorageMode !== "supabase") {
+  if (!client) {
+    showToast("Supabase 연결이 없어 공지를 삭제하지 못했습니다.");
     return false;
   }
 
@@ -1268,7 +1270,6 @@ function renderNotices() {
 
 async function addNotice(content) {
   if (!content.trim()) return;
-  const notices = getSavedNotices();
   const createdAt = new Date().toLocaleString("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -1280,27 +1281,25 @@ async function addNotice(content) {
     createdAt
   };
 
-  if (noticeStorageMode === "supabase" && await saveNoticeToSupabase(notice)) {
-    noticeCache = [notice, ...noticeCache.filter((item) => !DEFAULT_NOTICES.some((defaultNotice) => defaultNotice.id === item.id))];
-  } else {
-    notices.push(notice);
-    saveNotices(notices);
+  if (!await saveNoticeToSupabase(notice)) {
+    return;
   }
+
+  noticeCache = [notice, ...noticeCache.filter((item) => !DEFAULT_NOTICES.some((defaultNotice) => defaultNotice.id === item.id))];
   renderNotices();
   showToast("새 공지사항이 등록되었습니다.");
 }
 
 async function deleteNotice(id) {
   let notices = getSavedNotices();
-  const deleted = noticeStorageMode === "supabase" ? await deleteNoticeFromSupabase(id) : false;
-  notices = notices.filter((n) => n.id !== id);
 
-  if (noticeStorageMode === "supabase" && deleted) {
-    noticeCache = notices;
-  } else {
-    saveNotices(notices);
+  if (!await deleteNoticeFromSupabase(id)) {
+    return;
   }
 
+  notices = notices.filter((n) => n.id !== id);
+  noticeStorageMode = "supabase";
+  noticeCache = notices;
   renderNotices();
   showToast("공지사항이 삭제되었습니다.");
 }
@@ -1483,7 +1482,12 @@ reservationForm?.addEventListener("submit", async (event) => {
     createdAt,
   };
 
-  await addReservation(reservation);
+  const saved = await addReservation(reservation);
+
+  if (!saved) {
+    return;
+  }
+
   renderReservationAdminPanel();
   closeReservationModal();
   reservationForm.reset();
@@ -1491,7 +1495,12 @@ reservationForm?.addEventListener("submit", async (event) => {
 });
 
 reservationClearButton?.addEventListener("click", async () => {
-  await clearReservations();
+  const cleared = await clearReservations();
+
+  if (!cleared) {
+    return;
+  }
+
   renderReservationAdminPanel();
   showToast("예약 요청 목록을 정리했습니다.");
 });
