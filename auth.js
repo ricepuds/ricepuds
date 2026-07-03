@@ -12,6 +12,8 @@ const supabaseClient = window.supabase?.createClient
     })
   : null;
 
+window.scienceLabSupabase = supabaseClient;
+
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
@@ -109,6 +111,8 @@ function showAuthToast(message) {
 function initAuth() {
   const loginBtn = document.querySelector("#login-btn");
   const accountBtn = document.querySelector("#account-btn");
+  const mobileLoginBtn = document.querySelector("#mobile-login-btn");
+  const mobileAccountBtn = document.querySelector("#mobile-account-btn");
   const accountLabel = document.querySelector("#account-label");
   const accountAvatar = document.querySelector("#account-avatar");
   const loginModal = document.querySelector("#login-modal");
@@ -211,6 +215,14 @@ function initAuth() {
       accountBtn.hidden = !user;
     }
 
+    if (mobileLoginBtn) {
+      mobileLoginBtn.hidden = Boolean(user);
+    }
+
+    if (mobileAccountBtn) {
+      mobileAccountBtn.hidden = !user;
+    }
+
     if (accountLabel) {
       accountLabel.textContent = "내 계정";
     }
@@ -253,8 +265,20 @@ function initAuth() {
     openLoginModal("login");
   });
 
+  mobileLoginBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    window.closeMobileMenu?.();
+    openLoginModal("login");
+  });
+
   accountBtn?.addEventListener("click", (event) => {
     event.preventDefault();
+    openAccountModal();
+  });
+
+  mobileAccountBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    window.closeMobileMenu?.();
     openAccountModal();
   });
 

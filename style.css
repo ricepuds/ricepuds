@@ -1042,6 +1042,76 @@ h1 span {
   outline: none;
 }
 
+.mobile-menu-panel[hidden] {
+  display: none !important;
+}
+
+.mobile-menu-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.mobile-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 12, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.mobile-menu-sheet {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(360px, calc(100vw - 36px));
+  min-height: 100%;
+  padding: 22px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: #101417;
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.32);
+}
+
+.mobile-menu-sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+
+.mobile-menu-sheet header strong {
+  font-size: 1.1rem;
+}
+
+.mobile-menu-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-menu-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: #f7fbff;
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 900;
+}
+
+.mobile-menu-nav a:hover,
+.mobile-menu-nav a:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+
+.mobile-menu-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .prep-close {
   border: 0;
   background: transparent;
@@ -2424,15 +2494,39 @@ body.prep-theme-light .reagent-table tr[data-item-id]:focus-visible {
     display: none;
   }
 
-  .header-actions .nav-auth-link,
-  .header-actions .nav-account {
-    display: none;
-  }
-
   .header-actions .nav-auth-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
     padding: 0;
     color: transparent;
+  }
+
+  .header-actions .nav-account {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .header-actions .nav-account span:not(.account-avatar) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .header-actions .account-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 0.72rem;
   }
 
   .header-actions .nav-auth-link::before {
@@ -2769,7 +2863,12 @@ body.prep-theme-light .auth-tab.is-active {
 }
 
 .nav-account[hidden] {
-  display: none;
+  display: none !important;
+}
+
+.nav-auth-link[hidden],
+.mobile-menu-actions [hidden] {
+  display: none !important;
 }
 
 .account-avatar {
@@ -3753,4 +3852,3 @@ body.is-admin .notice-delete-btn {
     gap: 12px;
   }
 }
-

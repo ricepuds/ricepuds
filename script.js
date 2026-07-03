@@ -1,6 +1,10 @@
 const soonLinks = document.querySelectorAll("[data-soon]");
 const openPrepLinks = document.querySelectorAll("[data-open-prep]");
 const reservationOpenLinks = document.querySelectorAll("[data-reservation-open]");
+const menuButton = document.querySelector("#menu-button");
+const mobileMenu = document.querySelector("#mobile-menu");
+const mobileMenuCloseButtons = document.querySelectorAll("[data-mobile-menu-close]");
+const mobileMenuLinks = document.querySelectorAll("[data-mobile-menu-link]");
 const reservationModal = document.querySelector("#reservation-modal");
 const reservationCloseButtons = document.querySelectorAll("[data-reservation-close]");
 const reservationForm = document.querySelector("#reservation-form");
@@ -95,6 +99,38 @@ function showToast(message) {
     toast.classList.remove("is-visible");
   }, 2200);
 }
+
+function openMobileMenu() {
+  if (!mobileMenu) {
+    return;
+  }
+
+  mobileMenu.hidden = false;
+  menuButton?.setAttribute("aria-expanded", "true");
+  document.body.classList.add("is-mobile-menu-open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMobileMenu() {
+  if (!mobileMenu) {
+    return;
+  }
+
+  mobileMenu.hidden = true;
+  menuButton?.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("is-mobile-menu-open");
+
+  if (
+    (!reservationModal || reservationModal.hidden) &&
+    (!itemDetailModal || itemDetailModal.hidden) &&
+    (!document.querySelector("#login-modal") || document.querySelector("#login-modal").hidden) &&
+    (!document.querySelector("#account-modal") || document.querySelector("#account-modal").hidden)
+  ) {
+    document.body.style.overflow = "";
+  }
+}
+
+window.closeMobileMenu = closeMobileMenu;
 
 function normalizeText(value) {
   return String(value || "").trim();
@@ -898,8 +934,22 @@ function setTheme(theme) {
 }
 
 const RESERVATION_STORAGE_KEY = "science-lab-reservations";
+const SUPABASE_RESERVATIONS_TABLE = "science_lab_reservations";
+const SUPABASE_NOTICES_TABLE = "science_lab_notices";
+let reservationCache = [];
+let noticeCache = [];
+let reservationStorageMode = "local";
+let noticeStorageMode = "local";
+
+function getSupabaseStorageClient() {
+  return window.scienceLabSupabase || null;
+}
 
 function getSavedReservations() {
+  if (reservationStorageMode === "supabase") {
+    return reservationCache;
+  }
+
   try {
     const parsed = JSON.parse(localStorage.getItem(RESERVATION_STORAGE_KEY) || "[]");
     return Array.isArray(parsed) ? parsed : [];
@@ -909,11 +959,105 @@ function getSavedReservations() {
 }
 
 function saveReservations(reservations) {
+  reservationCache = reservations;
+
   try {
     localStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(reservations));
   } catch {
     showToast("예약 내역을 브라우저에 저장하지 못했습니다.");
   }
+}
+
+async function loadSupabaseReservations() {
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    return false;
+  }
+
+  try {
+    const { data, error } = await client
+      .from(SUPABASE_RESERVATIONS_TABLE)
+      .select("id, room, date, time, class_name, purpose, created_at")
+      .order("created_at_sort", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    reservationCache = (data || []).map((reservation) => ({
+      id: reservation.id,
+      room: reservation.room,
+      date: reservation.date,
+      time: reservation.time,
+      className: reservation.class_name,
+      purpose: reservation.purpose,
+      createdAt: reservation.created_at,
+    }));
+    reservationStorageMode = "supabase";
+    return true;
+  } catch (error) {
+    console.warn("Supabase reservations unavailable", error);
+    return false;
+  }
+}
+
+async function addReservation(reservation) {
+  const client = getSupabaseStorageClient();
+
+  if (client) {
+    try {
+      const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).insert({
+        id: reservation.id,
+        room: reservation.room,
+        date: reservation.date,
+        time: reservation.time,
+        class_name: reservation.className,
+        purpose: reservation.purpose,
+        created_at: reservation.createdAt,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      reservationStorageMode = "supabase";
+      reservationCache = [reservation, ...reservationCache].slice(0, 30);
+      return true;
+    } catch (error) {
+      console.warn("Supabase reservation insert failed", error);
+      showToast("Supabase 저장에 실패해 이 브라우저에 임시 저장합니다.");
+    }
+  }
+
+  const reservations = getSavedReservations();
+  reservations.unshift(reservation);
+  saveReservations(reservations.slice(0, 30));
+  return false;
+}
+
+async function clearReservations() {
+  const client = getSupabaseStorageClient();
+
+  if (client && reservationStorageMode === "supabase") {
+    try {
+      const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).delete().neq("id", "");
+
+      if (error) {
+        throw error;
+      }
+
+      reservationCache = [];
+      return true;
+    } catch (error) {
+      console.warn("Supabase reservation clear failed", error);
+      showToast("Supabase 예약 목록을 비우지 못했습니다.");
+      return false;
+    }
+  }
+
+  saveReservations([]);
+  return true;
 }
 
 function isReservationAdmin() {
@@ -944,6 +1088,10 @@ const DEFAULT_NOTICES = [
 ];
 
 function getSavedNotices() {
+  if (noticeStorageMode === "supabase") {
+    return noticeCache;
+  }
+
   try {
     const data = localStorage.getItem(NOTICE_STORAGE_KEY);
     if (!data) {
@@ -958,10 +1106,96 @@ function getSavedNotices() {
 }
 
 function saveNotices(notices) {
+  noticeCache = notices;
+
   try {
     localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(notices));
   } catch {
     showToast("공지사항을 저장하지 못했습니다.");
+  }
+}
+
+async function loadSupabaseNotices() {
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    return false;
+  }
+
+  try {
+    const { data, error } = await client
+      .from(SUPABASE_NOTICES_TABLE)
+      .select("id, content, created_at")
+      .order("created_at_sort", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    noticeCache = (data || []).map((notice) => ({
+      id: notice.id,
+      content: notice.content,
+      createdAt: notice.created_at,
+    }));
+
+    if (!noticeCache.length) {
+      noticeCache = DEFAULT_NOTICES;
+    }
+
+    noticeStorageMode = "supabase";
+    return true;
+  } catch (error) {
+    console.warn("Supabase notices unavailable", error);
+    return false;
+  }
+}
+
+async function saveNoticeToSupabase(notice) {
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    return false;
+  }
+
+  try {
+    const { error } = await client.from(SUPABASE_NOTICES_TABLE).insert({
+      id: notice.id,
+      content: notice.content,
+      created_at: notice.createdAt,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    noticeStorageMode = "supabase";
+    return true;
+  } catch (error) {
+    console.warn("Supabase notice insert failed", error);
+    showToast("Supabase 공지 저장에 실패해 이 브라우저에 임시 저장합니다.");
+    return false;
+  }
+}
+
+async function deleteNoticeFromSupabase(id) {
+  const client = getSupabaseStorageClient();
+
+  if (!client || noticeStorageMode !== "supabase") {
+    return false;
+  }
+
+  try {
+    const { error } = await client.from(SUPABASE_NOTICES_TABLE).delete().eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn("Supabase notice delete failed", error);
+    showToast("Supabase 공지를 삭제하지 못했습니다.");
+    return false;
   }
 }
 
@@ -1032,7 +1266,7 @@ function renderNotices() {
   });
 }
 
-function addNotice(content) {
+async function addNotice(content) {
   if (!content.trim()) return;
   const notices = getSavedNotices();
   const createdAt = new Date().toLocaleString("ko-KR", {
@@ -1040,21 +1274,33 @@ function addNotice(content) {
     timeStyle: "short",
   });
 
-  notices.push({
+  const notice = {
     id: `notice-${Date.now()}`,
     content: content.trim(),
     createdAt
-  });
+  };
 
-  saveNotices(notices);
+  if (noticeStorageMode === "supabase" && await saveNoticeToSupabase(notice)) {
+    noticeCache = [notice, ...noticeCache.filter((item) => !DEFAULT_NOTICES.some((defaultNotice) => defaultNotice.id === item.id))];
+  } else {
+    notices.push(notice);
+    saveNotices(notices);
+  }
   renderNotices();
   showToast("새 공지사항이 등록되었습니다.");
 }
 
-function deleteNotice(id) {
+async function deleteNotice(id) {
   let notices = getSavedNotices();
+  const deleted = noticeStorageMode === "supabase" ? await deleteNoticeFromSupabase(id) : false;
   notices = notices.filter((n) => n.id !== id);
-  saveNotices(notices);
+
+  if (noticeStorageMode === "supabase" && deleted) {
+    noticeCache = notices;
+  } else {
+    saveNotices(notices);
+  }
+
   renderNotices();
   showToast("공지사항이 삭제되었습니다.");
 }
@@ -1154,6 +1400,44 @@ soonLinks.forEach((link) => {
   });
 });
 
+menuButton?.addEventListener("click", () => {
+  if (mobileMenu && !mobileMenu.hidden) {
+    closeMobileMenu();
+  } else {
+    openMobileMenu();
+  }
+});
+
+mobileMenuCloseButtons.forEach((button) => {
+  button.addEventListener("click", closeMobileMenu);
+});
+
+mobileMenuLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    const href = link.getAttribute("href");
+
+    if (link.hasAttribute("data-mobile-about")) {
+      event.preventDefault();
+      closeMobileMenu();
+      openAboutPage();
+      return;
+    }
+
+    if (href === "#") {
+      event.preventDefault();
+      closeMobileMenu();
+      closeAboutPage();
+      closePrepRoom();
+      try {
+        history.pushState({ view: "home" }, "", "#");
+      } catch {}
+      return;
+    }
+
+    closeMobileMenu();
+  });
+});
+
 reservationOpenLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1181,16 +1465,15 @@ itemDetailModal?.addEventListener("click", (event) => {
   }
 });
 
-reservationForm?.addEventListener("submit", (event) => {
+reservationForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(reservationForm);
-  const reservations = getSavedReservations();
   const createdAt = new Date().toLocaleString("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 
-  reservations.unshift({
+  const reservation = {
     id: `${Date.now()}`,
     room: String(formData.get("room") || ""),
     date: String(formData.get("date") || ""),
@@ -1198,17 +1481,17 @@ reservationForm?.addEventListener("submit", (event) => {
     className: String(formData.get("className") || ""),
     purpose: String(formData.get("purpose") || ""),
     createdAt,
-  });
+  };
 
-  saveReservations(reservations.slice(0, 30));
+  await addReservation(reservation);
   renderReservationAdminPanel();
   closeReservationModal();
   reservationForm.reset();
   showToast("과학실 예약 요청이 접수되었습니다.");
 });
 
-reservationClearButton?.addEventListener("click", () => {
-  saveReservations([]);
+reservationClearButton?.addEventListener("click", async () => {
+  await clearReservations();
   renderReservationAdminPanel();
   showToast("예약 요청 목록을 정리했습니다.");
 });
@@ -1256,6 +1539,21 @@ window.addEventListener("science-lab-auth-change", () => {
   renderReservationAdminPanel();
   renderNotices();
 });
+
+async function initializeSupabaseStorage() {
+  const loadedReservations = await loadSupabaseReservations();
+  const loadedNotices = await loadSupabaseNotices();
+
+  if (loadedReservations) {
+    renderReservationAdminPanel();
+  }
+
+  if (loadedNotices) {
+    renderNotices();
+  }
+}
+
+initializeSupabaseStorage();
 
 openPrepLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
@@ -1445,6 +1743,9 @@ document.querySelectorAll(".site-nav a").forEach((link) => {
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    if (mobileMenu && !mobileMenu.hidden) {
+      closeMobileMenu();
+    }
     if (itemDetailModal && !itemDetailModal.hidden) {
       closeItemDetailModal();
     }

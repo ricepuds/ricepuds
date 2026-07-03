@@ -23,3 +23,7 @@ node dev-server.js
 ```
 
 브라우저에서 `http://127.0.0.1:5500/`를 엽니다.
+
+## Supabase 저장
+
+예약 요청과 공지사항은 Supabase 테이블이 있으면 Supabase에 저장됩니다. 배포 전에 Supabase Dashboard > SQL editor에서 `supabase-schema.sql` 내용을 한 번 실행하세요. 테이블 연결에 실패하면 기존처럼 브라우저 로컬 저장소에 임시 저장됩니다.
