@@ -4,6 +4,8 @@ create table if not exists public.science_lab_reservations (
   date text not null,
   time text not null,
   class_name text,
+  applicant_student_id text,
+  applicant_name text,
   purpose text,
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at text not null,
@@ -12,6 +14,10 @@ create table if not exists public.science_lab_reservations (
 
 alter table public.science_lab_reservations
   add column if not exists status text not null default 'pending';
+
+alter table public.science_lab_reservations
+  add column if not exists applicant_student_id text,
+  add column if not exists applicant_name text;
 
 do $$
 begin

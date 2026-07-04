@@ -3294,6 +3294,12 @@ body.prep-theme-light .form-group input {
   line-height: 1.5;
 }
 
+.reservation-request .reservation-applicant {
+  color: #667589;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
 .reservation-request-footer {
   display: flex;
   align-items: center;

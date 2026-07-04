@@ -978,7 +978,7 @@ async function loadSupabaseReservations() {
   try {
     const { data, error } = await client
       .from(SUPABASE_RESERVATIONS_TABLE)
-      .select("id, room, date, time, class_name, purpose, created_at, status")
+      .select("id, room, date, time, class_name, applicant_student_id, applicant_name, purpose, created_at, status")
       .order("created_at_sort", { ascending: false });
 
     if (error) {
@@ -991,6 +991,8 @@ async function loadSupabaseReservations() {
       date: reservation.date,
       time: reservation.time,
       className: reservation.class_name,
+      applicantStudentId: reservation.applicant_student_id,
+      applicantName: reservation.applicant_name,
       purpose: reservation.purpose,
       createdAt: reservation.created_at,
       status: reservation.status || "pending",
@@ -1018,6 +1020,8 @@ async function addReservation(reservation) {
       date: reservation.date,
       time: reservation.time,
       class_name: reservation.className,
+      applicant_student_id: reservation.applicantStudentId,
+      applicant_name: reservation.applicantName,
       purpose: reservation.purpose,
       created_at: reservation.createdAt,
       status: reservation.status || "pending",
@@ -1403,6 +1407,7 @@ function renderReservationAdminPanel() {
           <span>${escapeHtml(reservation.date)} · ${escapeHtml(reservation.time)}</span>
         </div>
         <p>${escapeHtml(reservation.className || "학급 미입력")} / ${escapeHtml(reservation.purpose || "사용 목적 미입력")}</p>
+        <p class="reservation-applicant">신청자: ${escapeHtml(reservation.applicantStudentId || "학번 미입력")} · ${escapeHtml(reservation.applicantName || "이름 미입력")}</p>
         <div class="reservation-request-footer">
           <small>${escapeHtml(reservation.createdAt)}</small>
           <span class="reservation-status is-${status}">${escapeHtml(statusText[status])}</span>
@@ -1575,6 +1580,8 @@ reservationForm?.addEventListener("submit", async (event) => {
     date: String(formData.get("date") || ""),
     time: String(formData.get("time") || ""),
     className: String(formData.get("className") || ""),
+    applicantStudentId: String(formData.get("applicantStudentId") || ""),
+    applicantName: String(formData.get("applicantName") || ""),
     purpose: String(formData.get("purpose") || ""),
     createdAt,
     status: "pending",
