@@ -978,7 +978,7 @@ async function loadSupabaseReservations() {
   try {
     const { data, error } = await client
       .from(SUPABASE_RESERVATIONS_TABLE)
-      .select("id, room, date, time, class_name, purpose, created_at")
+      .select("id, room, date, time, class_name, purpose, created_at, status")
       .order("created_at_sort", { ascending: false });
 
     if (error) {
@@ -993,6 +993,7 @@ async function loadSupabaseReservations() {
       className: reservation.class_name,
       purpose: reservation.purpose,
       createdAt: reservation.created_at,
+      status: reservation.status || "pending",
     }));
     reservationStorageMode = "supabase";
     return true;
@@ -1019,6 +1020,7 @@ async function addReservation(reservation) {
       class_name: reservation.className,
       purpose: reservation.purpose,
       created_at: reservation.createdAt,
+      status: reservation.status || "pending",
     });
 
     if (error) {
@@ -1036,6 +1038,11 @@ async function addReservation(reservation) {
 }
 
 async function clearReservations() {
+  if (!isReservationAdmin()) {
+    showToast("관리자만 예약 요청 목록을 정리할 수 있습니다.");
+    return false;
+  }
+
   const client = getSupabaseStorageClient();
 
   if (!client) {
@@ -1062,6 +1069,49 @@ async function clearReservations() {
 
 function isReservationAdmin() {
   return document.body.classList.contains("is-admin");
+}
+
+function getReservationStatus(status) {
+  return ["pending", "approved", "rejected"].includes(status) ? status : "pending";
+}
+
+async function updateReservationStatus(id, status) {
+  if (!isReservationAdmin()) {
+    showToast("관리자만 예약 요청을 처리할 수 있습니다.");
+    return false;
+  }
+
+  if (!["approved", "rejected"].includes(status)) {
+    return false;
+  }
+
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    showToast("Supabase 연결이 없어 예약 상태를 저장하지 못했습니다.");
+    return false;
+  }
+
+  try {
+    const { error } = await client
+      .from(SUPABASE_RESERVATIONS_TABLE)
+      .update({ status })
+      .eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    reservationStorageMode = "supabase";
+    reservationCache = reservationCache.map((reservation) => (
+      reservation.id === id ? { ...reservation, status } : reservation
+    ));
+    return true;
+  } catch (error) {
+    console.warn("Supabase reservation status update failed", error);
+    showToast("예약 상태를 변경하지 못했습니다. 관리자 권한/RLS 설정을 확인해 주세요.");
+    return false;
+  }
 }
 
 /* ==========================================
@@ -1269,6 +1319,11 @@ function renderNotices() {
 }
 
 async function addNotice(content) {
+  if (!isReservationAdmin()) {
+    showToast("관리자만 공지사항을 등록할 수 있습니다.");
+    return;
+  }
+
   if (!content.trim()) return;
   const createdAt = new Date().toLocaleString("ko-KR", {
     dateStyle: "medium",
@@ -1291,6 +1346,11 @@ async function addNotice(content) {
 }
 
 async function deleteNotice(id) {
+  if (!isReservationAdmin()) {
+    showToast("관리자만 공지사항을 삭제할 수 있습니다.");
+    return;
+  }
+
   let notices = getSavedNotices();
 
   if (!await deleteNoticeFromSupabase(id)) {
@@ -1320,6 +1380,11 @@ function renderReservationAdminPanel() {
   }
 
   const reservations = getSavedReservations();
+  const statusText = {
+    pending: "대기",
+    approved: "수락",
+    rejected: "거절",
+  };
 
   if (!reservations.length) {
     reservationList.innerHTML = `
@@ -1329,17 +1394,49 @@ function renderReservationAdminPanel() {
   }
 
   reservationList.innerHTML = reservations
-    .map((reservation) => `
-      <article class="reservation-request">
+    .map((reservation) => {
+      const status = getReservationStatus(reservation.status);
+      return `
+      <article class="reservation-request" data-reservation-id="${escapeHtml(reservation.id)}">
         <div>
           <strong>${escapeHtml(reservation.room)}</strong>
           <span>${escapeHtml(reservation.date)} · ${escapeHtml(reservation.time)}</span>
         </div>
         <p>${escapeHtml(reservation.className || "학급 미입력")} / ${escapeHtml(reservation.purpose || "사용 목적 미입력")}</p>
-        <small>${escapeHtml(reservation.createdAt)}</small>
+        <div class="reservation-request-footer">
+          <small>${escapeHtml(reservation.createdAt)}</small>
+          <span class="reservation-status is-${status}">${escapeHtml(statusText[status])}</span>
+        </div>
+        ${isAdmin && status === "pending" ? `
+          <div class="reservation-actions" aria-label="예약 요청 처리">
+            <button type="button" class="reservation-action is-approve" data-reservation-status="approved">수락</button>
+            <button type="button" class="reservation-action is-reject" data-reservation-status="rejected">거절</button>
+          </div>
+        ` : ""}
       </article>
-    `)
+    `;
+    })
     .join("");
+
+  reservationList.querySelectorAll("[data-reservation-status]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      const request = event.target.closest("[data-reservation-id]");
+      const status = event.target.dataset.reservationStatus;
+
+      if (!request || !status) {
+        return;
+      }
+
+      const updated = await updateReservationStatus(request.dataset.reservationId, status);
+
+      if (!updated) {
+        return;
+      }
+
+      renderReservationAdminPanel();
+      showToast(status === "approved" ? "예약 요청을 수락했습니다." : "예약 요청을 거절했습니다.");
+    });
+  });
 }
 
 function openReservationModal() {
@@ -1480,6 +1577,7 @@ reservationForm?.addEventListener("submit", async (event) => {
     className: String(formData.get("className") || ""),
     purpose: String(formData.get("purpose") || ""),
     createdAt,
+    status: "pending",
   };
 
   const saved = await addReservation(reservation);
@@ -1508,6 +1606,11 @@ reservationClearButton?.addEventListener("click", async () => {
 // Admin notice form submit
 adminNoticeForm?.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!isReservationAdmin()) {
+    showToast("관리자만 공지사항을 등록할 수 있습니다.");
+    return;
+  }
+
   if (adminNoticeInput) {
     addNotice(adminNoticeInput.value);
     adminNoticeInput.value = "";

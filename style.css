@@ -3294,6 +3294,73 @@ body.prep-theme-light .form-group input {
   line-height: 1.5;
 }
 
+.reservation-request-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.reservation-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d7e1ea;
+  border-radius: 999px;
+  color: #526274;
+  background: #f6fafc;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.reservation-status.is-approved {
+  border-color: #b7dfca;
+  color: #157347;
+  background: #edf9f2;
+}
+
+.reservation-status.is-rejected {
+  border-color: #f0c4c4;
+  color: #b42318;
+  background: #fff1f1;
+}
+
+.reservation-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reservation-action {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d4dee7;
+  border-radius: 8px;
+  color: #435467;
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.reservation-action:hover,
+.reservation-action:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.reservation-action.is-approve {
+  border-color: #9bd7b7;
+  color: #157347;
+}
+
+.reservation-action.is-reject {
+  border-color: #efb4b4;
+  color: #b42318;
+}
+
 .error-msg {
   color: #d33838;
   font-weight: 800;
