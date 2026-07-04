@@ -524,40 +524,23 @@
 
       <!-- 모바일 전환용 탭 버튼 (모바일 화면에서 노출) -->
       <div class="reservation-tabs" id="reservation-tabs" aria-label="예약 모달 탭">
-        <button type="button" class="reservation-tab is-active" data-res-tab="notices">안내 및 현황</button>
+        <button type="button" class="reservation-tab is-active" data-res-tab="notices">예약 현황</button>
         <button type="button" class="reservation-tab" data-res-tab="form">예약 신청</button>
       </div>
 
       <div class="reservation-modal-body">
-        <!-- 공지사항 및 현황 패널 (좌측 열) -->
+        <!-- 예약 현황 패널 (좌측 열) -->
         <aside class="reservation-notice-section" id="reservation-notice-section">
-          <div class="notice-inner-tabs">
-            <button type="button" class="notice-tab-btn is-active" data-notice-tab="board">공지사항</button>
-            <button type="button" class="notice-tab-btn" data-notice-tab="status">예약 현황</button>
+          <div class="reservation-status-board" id="reservation-status-board" aria-live="polite">
+            <!-- JavaScript에서 렌더링 -->
           </div>
-
-          <!-- 공지사항 탭 -->
-          <div class="notice-tab-content" id="notice-tab-board">
-            <div class="notice-list-container" id="notice-list-container">
+          <div class="reservation-admin-panel" id="reservation-admin-panel" hidden>
+            <header>
+              <h3>접수된 예약 요청</h3>
+              <button type="button" class="reservation-clear" id="reservation-clear-btn">전체 삭제</button>
+            </header>
+            <div class="reservation-list" id="reservation-list">
               <!-- JavaScript에서 렌더링 -->
-            </div>
-            <!-- 관리자용 공지 작성 폼 -->
-            <form id="admin-notice-form" class="admin-notice-form" hidden>
-              <input type="text" id="admin-notice-input" placeholder="새 공지사항을 입력하세요..." required>
-              <button type="submit">등록</button>
-            </form>
-          </div>
-
-          <!-- 예약현황 탭 -->
-          <div class="notice-tab-content" id="notice-tab-status" hidden>
-            <div class="reservation-admin-panel" id="reservation-admin-panel">
-              <header>
-                <h3>접수된 예약 요청</h3>
-                <button type="button" class="reservation-clear" id="reservation-clear-btn">전체 삭제</button>
-              </header>
-              <div class="reservation-list" id="reservation-list">
-                <!-- JavaScript에서 렌더링 -->
-              </div>
             </div>
           </div>
         </aside>
@@ -591,6 +574,8 @@
                 <option value="6교시">6교시</option>
                 <option value="7교시">7교시</option>
                 <option value="방과후">방과후</option>
+                <option value="야자 1">야자 1</option>
+                <option value="야자 2">야자 2</option>
               </select>
             </div>
 

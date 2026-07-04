@@ -1414,6 +1414,44 @@ h1 span {
   box-shadow: 0 0 0 3px rgba(115, 229, 160, 0.16);
 }
 
+.table-edit-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid #405366;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #15212b;
+  font: inherit;
+  line-height: 1.35;
+  outline: none;
+}
+
+.table-edit-field.is-compact {
+  min-height: 32px;
+  padding-block: 5px;
+}
+
+textarea.table-edit-field {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.table-edit-field:focus {
+  border-color: #73e5a0;
+  box-shadow: 0 0 0 3px rgba(115, 229, 160, 0.16);
+}
+
+.reagent-name.edit-name {
+  gap: 8px;
+}
+
+.reagent-name.edit-name .table-edit-field + .table-edit-field {
+  color: var(--dark-muted);
+  font-size: 0.82rem;
+}
+
 .search-box {
   height: 72px;
   display: grid;
@@ -1892,6 +1930,121 @@ h1 span {
   transform: translate(-50%, 0);
 }
 
+body.site-theme-light {
+  color: var(--ink);
+  background:
+    linear-gradient(rgba(23, 33, 29, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 33, 29, 0.035) 1px, transparent 1px),
+    var(--bg);
+  background-size: 44px 44px, 44px 44px, auto;
+}
+
+body.site-theme-light .site-header {
+  color: var(--ink);
+  border-bottom-color: rgba(23, 33, 29, 0.12);
+  background: rgba(255, 253, 247, 0.96);
+}
+
+body.site-theme-light .brand {
+  color: var(--ink);
+}
+
+body.site-theme-light .brand-mark {
+  background: var(--ink);
+}
+
+body.site-theme-light .brand-mark::before {
+  border-color: #ffffff;
+}
+
+body.site-theme-light .brand-mark::after {
+  background: #ffffff;
+}
+
+body.site-theme-light .site-nav {
+  color: #66706a;
+}
+
+body.site-theme-light .site-nav a:hover,
+body.site-theme-light .site-nav a:focus-visible,
+body.site-theme-light .site-nav a.is-active {
+  color: var(--ink);
+}
+
+body.site-theme-light .site-nav a.is-active::after {
+  background: var(--ink);
+}
+
+body.site-theme-light .header-actions .nav-auth-link {
+  color: var(--ink);
+  background: #eef3f0;
+}
+
+body.site-theme-light .header-actions .nav-auth-link:hover,
+body.site-theme-light .header-actions .nav-auth-link:focus-visible {
+  background: #e1e9e5;
+}
+
+body.site-theme-light .hero-continue {
+  color: var(--ink);
+  background: #fffdf7;
+  box-shadow: 0 18px 48px rgba(35, 43, 39, 0.12);
+}
+
+body.site-theme-light .hero-continue:hover,
+body.site-theme-light .hero-continue:focus-visible {
+  background: #f7fbf8;
+}
+
+body.site-theme-light .continue-copy small,
+body.site-theme-light .continue-arrow {
+  color: #66706a;
+}
+
+body.site-theme-light .section-head h2,
+body.site-theme-light .space-info h3 {
+  color: var(--ink);
+}
+
+body.site-theme-light .section-head p:last-child {
+  color: #7a6a18;
+}
+
+body.site-theme-light .space-info span {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(23, 33, 29, 0.1), 0 10px 24px rgba(35, 43, 39, 0.08);
+}
+
+body.site-theme-light .space-card:hover .space-info span,
+body.site-theme-light .space-card:focus-visible .space-info span,
+body.site-theme-light .space-card.is-selected .space-info span {
+  background: #f7fbf8;
+}
+
+body.site-theme-light .space-info p {
+  color: #66706a;
+}
+
+body.site-theme-light .mobile-menu-sheet {
+  color: var(--ink);
+  border-color: rgba(23, 33, 29, 0.12);
+  background: #fffdf7;
+}
+
+body.site-theme-light .mobile-menu-sheet header {
+  border-bottom-color: rgba(23, 33, 29, 0.12);
+}
+
+body.site-theme-light .mobile-menu-sheet header strong,
+body.site-theme-light .mobile-menu-nav a {
+  color: var(--ink);
+}
+
+body.site-theme-light .mobile-menu-nav a:hover,
+body.site-theme-light .mobile-menu-nav a:focus-visible {
+  background: #eef3f0;
+}
+
 body.site-theme-dark {
   color: #f4f8fb;
   background:
@@ -2167,6 +2320,21 @@ body.prep-theme-light .stock-input {
   color: #15202b;
   border-color: #cbd7e1;
   background: #f8fbfd;
+}
+
+body.prep-theme-light .table-edit-field {
+  color: #15202b;
+  border-color: #cbd7e1;
+  background: #ffffff;
+}
+
+body.prep-theme-light .table-edit-field:focus {
+  border-color: #1b6b5f;
+  box-shadow: 0 0 0 3px rgba(27, 107, 95, 0.16);
+}
+
+body.prep-theme-light .reagent-name.edit-name .table-edit-field + .table-edit-field {
+  color: #667589;
 }
 
 body.prep-theme-light .account-row button,
@@ -3214,6 +3382,32 @@ body.prep-theme-light .form-group input {
   gap: 0 12px;
 }
 
+.reservation-form {
+  max-height: calc(100dvh - 170px);
+  padding: 20px 24px 18px;
+  overflow: auto;
+}
+
+.reservation-form .form-group {
+  margin-bottom: 10px;
+}
+
+.reservation-form .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.86rem;
+}
+
+.reservation-form .form-group input,
+.reservation-form .form-group select,
+.reservation-form .form-group textarea {
+  min-height: 44px;
+}
+
+.reservation-form .form-group textarea {
+  min-height: 88px;
+}
+
 .reservation-admin-panel {
   margin: 0 24px 24px;
   padding: 16px;
@@ -3384,11 +3578,11 @@ body.prep-theme-light .form-group input {
 
 .modal-actions {
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .modal-actions .button {
-  min-height: 48px;
+  min-height: 46px;
 }
 
 .modal-actions .button.primary {
@@ -3503,23 +3697,298 @@ body.prep-theme-light .form-group input {
 .reservation-modal-content {
   width: min(100%, 980px);
   max-width: 980px; /* Expand on desktop */
+  max-height: calc(100dvh - 60px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   transition: width 0.3s ease, max-width 0.3s ease;
 }
 
+.reservation-modal-content .modal-header {
+  flex: 0 0 auto;
+  padding: 20px 24px 16px;
+}
+
 .reservation-modal-body {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 1.15fr 1fr; /* Notice panel on left, reservation form on right */
+  grid-template-columns: minmax(300px, 0.95fr) minmax(360px, 1fr); /* Notice panel on left, reservation form on right */
+  align-items: start;
   background: #ffffff;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .reservation-notice-section {
-  padding: 24px;
+  max-height: calc(100dvh - 170px);
+  padding: 20px 24px 16px;
   border-right: 1px solid #e2e8f0;
   background: #f8fafc;
   display: flex;
   flex-direction: column;
-  min-height: 480px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.reservation-status-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.schedule-board-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dbe5ed;
+}
+
+.schedule-board-head p,
+.schedule-board-head h3 {
+  margin: 0;
+}
+
+.schedule-board-head p {
+  color: #1b6b5f;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.schedule-board-head h3 {
+  margin-top: 3px;
+  color: #101820;
+  font-size: 1.02rem;
+}
+
+.schedule-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.schedule-title-row h3 {
+  margin-top: 0;
+}
+
+.schedule-request-toggle {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid #cbd7e1;
+  border-radius: 7px;
+  color: #1b6b5f;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.schedule-request-toggle:hover,
+.schedule-request-toggle:focus-visible {
+  border-color: #1b6b5f;
+  background: #eaf7f3;
+  outline: none;
+}
+
+.schedule-request-toggle[aria-expanded="true"] {
+  color: #ffffff;
+  border-color: #1b6b5f;
+  background: #1b6b5f;
+}
+
+.schedule-board-head > span {
+  flex: 0 0 auto;
+  color: #526274;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.schedule-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #cbd7e1;
+  border-radius: 8px;
+  color: #667589;
+  background: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.week-schedule-wrap {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.week-schedule-grid {
+  min-width: 248px;
+  display: grid;
+  grid-template-columns: 46px repeat(5, 30px);
+  gap: 2px 3px;
+}
+
+.week-corner,
+.week-day-head,
+.week-time-head,
+.week-schedule-cell {
+  border-radius: 4px;
+}
+
+.week-corner,
+.week-day-head,
+.week-time-head {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 3px;
+  color: #526274;
+  background: #ffffff;
+  border: 1px solid #dbe5ed;
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.week-time-head {
+  justify-content: flex-start;
+  color: #101820;
+}
+
+.week-schedule-cell {
+  width: 11px;
+  height: 11px;
+  min-height: 11px;
+  padding: 0;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  align-self: center;
+  text-align: center;
+  font-size: 0;
+}
+
+.week-schedule-cell strong {
+  display: none;
+}
+
+.week-schedule-cell.is-available {
+  border-color: #15803d;
+  background: #16a34a;
+}
+
+.week-schedule-cell.is-reserved {
+  border-color: #b91c1c;
+  background: #dc2626;
+}
+
+.week-schedule-cell.is-reserved strong {
+  color: #b42318;
+}
+
+.week-schedule-cell.is-available strong {
+  color: #14734f;
+}
+
+.schedule-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #526274;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.schedule-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-legend i {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  border-radius: 3px;
+}
+
+.schedule-legend i.is-available {
+  background: #16834d;
+}
+
+.schedule-legend i.is-reserved {
+  background: #cf3427;
+}
+
+.schedule-slot {
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.schedule-slot strong,
+.schedule-slot small {
+  display: block;
+}
+
+.schedule-slot strong {
+  color: #101820;
+  font-size: 0.95rem;
+}
+
+.schedule-slot small {
+  margin-top: 4px;
+  color: #526274;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.schedule-slot > span {
+  flex: 0 0 auto;
+  min-width: 50px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  text-align: center;
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.schedule-slot.is-available {
+  border-color: #a8dfbf;
+  background: #e9f9ef;
+}
+
+.schedule-slot.is-available > span {
+  background: #16834d;
+}
+
+.schedule-slot.is-reserved {
+  border-color: #f0b1aa;
+  background: #fff0ee;
+}
+
+.schedule-slot.is-reserved > span {
+  background: #cf3427;
 }
 
 /* Inner tab navigation inside notices section */
@@ -3684,30 +4153,36 @@ body.is-admin .notice-delete-btn {
 
 /* Integration of Reservation Status inside Notice Area */
 .reservation-notice-section .reservation-admin-panel {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  margin: 10px 0 0;
+  padding: 10px;
+  border: 1px solid #dbe5ed;
+  border-radius: 8px;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
+}
+
+.reservation-notice-section .reservation-admin-panel[hidden] {
+  display: none !important;
 }
 
 .reservation-notice-section .reservation-admin-panel header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #0f172a;
 }
 
 .reservation-notice-section .reservation-admin-panel header {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .reservation-notice-section .reservation-list {
-  max-height: 320px;
+  max-height: 140px;
+  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -3759,11 +4234,14 @@ body.is-admin .notice-delete-btn {
   .reservation-modal-content {
     width: 100%;
     max-width: 520px;
+    display: block;
+    overflow: auto;
   }
 
   .reservation-modal-body {
     grid-template-columns: 1fr; /* Stack vertically if shown, but we toggle visible sections */
     min-height: auto;
+    overflow: visible;
   }
 
   .reservation-tabs {
@@ -3772,8 +4250,19 @@ body.is-admin .notice-delete-btn {
 
   .reservation-notice-section {
     border-right: 0;
-    min-height: 380px;
+    max-height: none;
+    min-height: 0;
     padding: 20px;
+    overflow: visible;
+  }
+
+  .reservation-form {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .schedule-grid {
+    grid-template-columns: 1fr;
   }
 
   /* Controlled by JS viewport toggling classes */

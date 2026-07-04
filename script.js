@@ -8,7 +8,10 @@ const mobileMenuLinks = document.querySelectorAll("[data-mobile-menu-link]");
 const reservationModal = document.querySelector("#reservation-modal");
 const reservationCloseButtons = document.querySelectorAll("[data-reservation-close]");
 const reservationForm = document.querySelector("#reservation-form");
+const reservationRoomInput = document.querySelector("#reservation-room");
 const reservationDateInput = document.querySelector("#reservation-date");
+const reservationTimeInput = document.querySelector("#reservation-time");
+const reservationStatusBoard = document.querySelector("#reservation-status-board");
 const reservationAdminPanel = document.querySelector("#reservation-admin-panel");
 const reservationList = document.querySelector("#reservation-list");
 const reservationClearButton = document.querySelector("#reservation-clear-btn");
@@ -81,6 +84,8 @@ let inventoryItems = [];
 let toastTimer;
 let selectedItemId = "";
 let cabinetViewer;
+let reservationRequestsVisible = false;
+const INVENTORY_EDITS_STORAGE_KEY = "science-lab-inventory-edits";
 
 try {
   if (!history.state) {
@@ -153,6 +158,112 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function getSavedInventoryEdits() {
+  if (inventoryEditsStorageMode === "supabase") {
+    return inventoryEditsCache;
+  }
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(INVENTORY_EDITS_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveInventoryEdits(edits) {
+  inventoryEditsCache = edits;
+
+  try {
+    localStorage.setItem(INVENTORY_EDITS_STORAGE_KEY, JSON.stringify(edits));
+  } catch {
+    showToast("Changes were applied, but this browser could not save them.");
+  }
+}
+
+function getInventorySearchText(item) {
+  return [
+    item.area,
+    item.category,
+    item.name,
+    item.detail,
+    item.formula,
+    item.quantity,
+    item.location,
+    item.sourceSheet,
+    item.sourceCell,
+  ].join(" ").toLowerCase();
+}
+
+function normalizeInventoryItem(item) {
+  item.searchText = getInventorySearchText(item);
+
+  if (item.type === "reagent") {
+    const numericQuantity = Number(String(item.quantity).replaceAll(",", ""));
+    item.lowStock = Boolean(item.toxic) || (Number.isFinite(numericQuantity) && numericQuantity > 0 && numericQuantity <= 50);
+  }
+
+  return item;
+}
+
+function applyInventoryEdits() {
+  const edits = getSavedInventoryEdits();
+
+  inventoryItems = inventoryItems.map((item) => {
+    const itemEdits = edits[item.id];
+
+    if (!itemEdits || typeof itemEdits !== "object") {
+      return normalizeInventoryItem(item);
+    }
+
+    return normalizeInventoryItem({
+      ...item,
+      category: itemEdits.category ?? item.category,
+      name: itemEdits.name ?? item.name,
+      detail: itemEdits.detail ?? item.detail,
+      quantity: itemEdits.quantity ?? item.quantity,
+      location: itemEdits.location ?? item.location,
+    });
+  });
+}
+
+async function updateInventoryItemField(itemId, field, value) {
+  const editableFields = new Set(["category", "name", "detail", "quantity", "location"]);
+
+  if (!isReservationAdmin() || !editableFields.has(field)) {
+    return;
+  }
+
+  const item = inventoryItems.find((inventoryItem) => inventoryItem.id === itemId);
+
+  if (!item) {
+    return;
+  }
+
+  const nextValue = String(value || "").trim() || "-";
+
+  if (String(item[field]) === nextValue) {
+    return;
+  }
+
+  item[field] = nextValue;
+  normalizeInventoryItem(item);
+
+  const edits = getSavedInventoryEdits();
+  edits[itemId] = {
+    ...(edits[itemId] || {}),
+    [field]: item[field],
+  };
+  saveInventoryEdits(edits);
+
+  buildCategoryFilters();
+  renderStats();
+  renderTable();
+
+  const savedToSupabase = await saveInventoryEditToSupabase(itemId, field, item[field]);
+  showToast(savedToSupabase ? "Saved to Supabase." : "Saved on this device.");
 }
 
 function getRemainingRatio(reagent) {
@@ -585,6 +696,7 @@ function buildInventoryItems() {
 
     return {
       id: `시약-${String(id).padStart(3, "0")}`,
+      type: "reagent",
       numericId: id,
       area: "시약",
       category: reagent.category || "분류 없음",
@@ -610,6 +722,7 @@ function buildInventoryItems() {
 
   const equipmentItems = labItems.map((item, index) => ({
     id: `${item.area}-${String(index + 1).padStart(3, "0")}`,
+    type: "equipment",
     numericId: 10000 + index + 1,
     area: item.area,
     category: item.category || "위치 미정",
@@ -634,6 +747,7 @@ function buildInventoryItems() {
   }));
 
   inventoryItems = [...reagentItems, ...equipmentItems];
+  applyInventoryEdits();
 }
 
 function getAreaItems() {
@@ -769,6 +883,22 @@ function renderStats() {
   lowReagents.textContent = filteredItems.length.toLocaleString("ko-KR");
 }
 
+function renderAdminEditInput(item, field, value, options = {}) {
+  if (!isReservationAdmin()) {
+    return escapeHtml(value);
+  }
+
+  const tag = options.multiline ? "textarea" : "input";
+  const label = `${field} ${item.name}`;
+  const className = `table-edit-field ${options.compact ? "is-compact" : ""}`;
+
+  if (tag === "textarea") {
+    return `<textarea class="${className}" data-edit-field="${field}" data-item-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(label)}">${escapeHtml(value)}</textarea>`;
+  }
+
+  return `<input class="${className}" data-edit-field="${field}" data-item-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}">`;
+}
+
 function renderTable() {
   const rows = getFilteredItems();
   const hasSelectedItem = rows.some((item) => item.id === selectedItemId);
@@ -783,20 +913,28 @@ function renderTable() {
       const statusLabel = getStatusLabel(item);
       const detail = getDetailText(item);
       const isSelected = item.id === selectedItemId;
+      const nameContent = isReservationAdmin()
+        ? `
+            <span class="reagent-name edit-name">
+              ${renderAdminEditInput(item, "name", item.name)}
+              ${renderAdminEditInput(item, "location", item.location, { compact: true })}
+            </span>
+          `
+        : `
+            <span class="reagent-name">
+              <strong>${escapeHtml(item.name)}</strong>
+              <small>${escapeHtml(item.location)}</small>
+            </span>
+          `;
 
       return `
         <tr class="${isSelected ? "is-selected" : ""}" data-item-id="${escapeHtml(item.id)}" tabindex="0" aria-selected="${String(isSelected)}" aria-label="${escapeHtml(item.name)} 보관 위치 상세 보기">
           <td>${String(index + 1).padStart(3, "0")}</td>
           <td><span class="category-badge">${escapeHtml(item.area)}</span></td>
-          <td>${escapeHtml(item.category)}</td>
-          <td>
-            <span class="reagent-name">
-              <strong>${escapeHtml(item.name)}</strong>
-              <small>${escapeHtml(item.location)}</small>
-            </span>
-          </td>
-          <td><span class="formula">${escapeHtml(detail)}</span></td>
-          <td>${escapeHtml(item.quantity)}</td>
+          <td>${renderAdminEditInput(item, "category", item.category, { compact: true })}</td>
+          <td>${nameContent}</td>
+          <td><span class="formula">${isReservationAdmin() ? renderAdminEditInput(item, "detail", item.detail, { multiline: true }) : escapeHtml(detail)}</span></td>
+          <td>${renderAdminEditInput(item, "quantity", item.quantity, { compact: true })}</td>
           <td><span class="state-badge ${statusClass}">${escapeHtml(statusLabel)}</span></td>
         </tr>
       `;
@@ -919,11 +1057,17 @@ function closeItemDetailModal() {
 function setTheme(theme) {
   const isDark = theme === "dark";
   document.body.classList.toggle("site-theme-dark", isDark);
+  document.body.classList.toggle("site-theme-light", !isDark);
   document.body.classList.toggle("prep-theme-light", !isDark);
 
   themeToggleButtons.forEach((button) => {
     button.setAttribute("aria-pressed", String(isDark));
+    button.setAttribute("title", isDark ? "Switch to light mode" : "Switch to dark mode");
     button.setAttribute("aria-label", isDark ? "라이트 모드로 전환" : "다크 모드로 전환");
+  });
+
+  themeToggleButtons.forEach((button) => {
+    button.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
   });
 
   try {
@@ -936,13 +1080,91 @@ function setTheme(theme) {
 const RESERVATION_STORAGE_KEY = "science-lab-reservations";
 const SUPABASE_RESERVATIONS_TABLE = "science_lab_reservations";
 const SUPABASE_NOTICES_TABLE = "science_lab_notices";
+const SUPABASE_INVENTORY_EDITS_TABLE = "science_lab_inventory_edits";
+const RESERVATION_TIME_SLOTS = ["1교시", "2교시", "3교시", "4교시", "5교시", "6교시", "7교시", "방과후", "야자 1", "야자 2"];
 let reservationCache = [];
 let noticeCache = [];
+let inventoryEditsCache = {};
 let reservationStorageMode = "local";
 let noticeStorageMode = "local";
+let inventoryEditsStorageMode = "local";
 
 function getSupabaseStorageClient() {
   return window.scienceLabSupabase || null;
+}
+
+async function loadSupabaseInventoryEdits() {
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    return false;
+  }
+
+  try {
+    const { data, error } = await client
+      .from(SUPABASE_INVENTORY_EDITS_TABLE)
+      .select("item_id, field_name, field_value");
+
+    if (error) {
+      throw error;
+    }
+
+    const edits = {};
+
+    (data || []).forEach((row) => {
+      if (!row.item_id || !row.field_name) {
+        return;
+      }
+
+      edits[row.item_id] = {
+        ...(edits[row.item_id] || {}),
+        [row.field_name]: row.field_value,
+      };
+    });
+
+    inventoryEditsStorageMode = "supabase";
+    saveInventoryEdits(edits);
+    applyInventoryEdits();
+    return true;
+  } catch (error) {
+    console.warn("Supabase inventory edits unavailable", error);
+    return false;
+  }
+}
+
+async function saveInventoryEditToSupabase(itemId, field, value) {
+  if (!isReservationAdmin()) {
+    return false;
+  }
+
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    return false;
+  }
+
+  try {
+    const { error } = await client
+      .from(SUPABASE_INVENTORY_EDITS_TABLE)
+      .upsert({
+        item_id: itemId,
+        field_name: field,
+        field_value: value,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "item_id,field_name",
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    inventoryEditsStorageMode = "supabase";
+    return true;
+  } catch (error) {
+    console.warn("Supabase inventory edit save failed", error);
+    return false;
+  }
 }
 
 function getSavedReservations() {
@@ -1378,6 +1600,12 @@ function renderReservationAdminPanel() {
   }
 
   const isAdmin = isReservationAdmin();
+  reservationAdminPanel.hidden = !isAdmin || !reservationRequestsVisible;
+
+  if (!isAdmin) {
+    reservationList.innerHTML = "";
+    return;
+  }
 
   if (reservationClearButton) {
     reservationClearButton.hidden = !isAdmin;
@@ -1439,37 +1667,203 @@ function renderReservationAdminPanel() {
       }
 
       renderReservationAdminPanel();
+      renderReservationSchedule();
       showToast(status === "approved" ? "예약 요청을 수락했습니다." : "예약 요청을 거절했습니다.");
     });
   });
 }
+
+function isActiveReservationForSlot(reservation, room, date, time) {
+  return reservation.room === room &&
+    reservation.date === date &&
+    reservation.time === time &&
+    getReservationStatus(reservation.status) !== "rejected";
+}
+
+function getReservationForSlot(room, date, time) {
+  return getSavedReservations().find((reservation) => (
+    isActiveReservationForSlot(reservation, room, date, time)
+  ));
+}
+
+function getLocalDateValue(date = new Date()) {
+  const localDate = new Date(date);
+  localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
+  return localDate.toISOString().slice(0, 10);
+}
+
+function addDaysToDateValue(dateValue, days) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return getLocalDateValue(date);
+}
+
+function getWeekdayScheduleDates(dateValue) {
+  const selectedDate = new Date(`${dateValue}T00:00:00`);
+  const day = selectedDate.getDay();
+  const mondayOffset = day === 0 ? 1 : day === 6 ? 2 : 1 - day;
+  selectedDate.setDate(selectedDate.getDate() + mondayOffset);
+
+  const mondayValue = getLocalDateValue(selectedDate);
+  return Array.from({ length: 5 }, (_, index) => addDaysToDateValue(mondayValue, index));
+}
+
+function formatScheduleDayLabel(dateValue) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  return date.toLocaleDateString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function renderReservationSchedule() {
+  if (!reservationStatusBoard) {
+    return;
+  }
+
+  const room = reservationRoomInput?.value || "";
+  const startDate = reservationDateInput?.value || getLocalDateValue();
+  const weekDates = Array.from({ length: 7 }, (_, index) => addDaysToDateValue(startDate, index));
+  const requestToggle = "";
+  const weekEndDate = weekDates[weekDates.length - 1];
+  const dayHeaders = weekDates
+    .map((dateValue) => `<div class="week-day-head">${escapeHtml(formatScheduleDayLabel(dateValue))}</div>`)
+    .join("");
+  const slotRows = RESERVATION_TIME_SLOTS.map((time) => {
+    const cells = weekDates.map((dateValue) => {
+      const reservation = getReservationForSlot(room, dateValue, time);
+      const isReserved = Boolean(reservation);
+      const statusClass = isReserved ? "is-reserved" : "is-available";
+      const statusLabel = isReserved ? "예약됨" : "가능";
+      const detailText = isReserved
+        ? `${reservation.className || "학급 미입력"} · ${reservation.applicantName || "이름 미입력"}`
+        : "빈 시간";
+
+      return `
+        <div class="week-schedule-cell ${statusClass}">
+          <strong>${statusLabel}</strong>
+          <small>${escapeHtml(detailText)}</small>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="week-time-head">${escapeHtml(time)}</div>
+      ${cells}
+    `;
+  }).join("");
+
+  reservationStatusBoard.innerHTML = `
+    <header class="schedule-board-head">
+      <div>
+        <p>Weekly Status</p>
+        <div class="schedule-title-row">
+          <h3>${escapeHtml(room || "공간 선택")}</h3>
+          ${requestToggle}
+        </div>
+      </div>
+      <span>${escapeHtml(weekDates[0])} ~ ${escapeHtml(weekEndDate)}</span>
+    </header>
+    <div class="week-schedule-wrap">
+      <div class="week-schedule-grid">
+        <div class="week-corner">시간</div>
+        ${dayHeaders}
+        ${slotRows}
+      </div>
+    </div>
+    <div class="schedule-legend" aria-label="예약 상태 설명">
+      <span><i class="is-available"></i> 예약 가능</span>
+      <span><i class="is-reserved"></i> 예약 있음</span>
+    </div>
+  `;
+}
+
+function renderReservationScheduleCompact() {
+  if (!reservationStatusBoard) {
+    return;
+  }
+
+  const room = reservationRoomInput?.value || "";
+  const startDate = reservationDateInput?.value || getLocalDateValue();
+  const weekDates = getWeekdayScheduleDates(startDate);
+  const pendingRequestCount = getSavedReservations().filter((reservation) => (
+    getReservationStatus(reservation.status) === "pending"
+  )).length;
+  const requestToggle = isReservationAdmin()
+    ? `<button type="button" class="schedule-request-toggle" data-reservation-requests-toggle aria-expanded="${String(reservationRequestsVisible)}">예약 요청${pendingRequestCount ? ` ${pendingRequestCount}` : ""}</button>`
+    : "";
+  const weekEndDate = weekDates[weekDates.length - 1];
+  const dayHeaders = weekDates
+    .map((dateValue) => `<div class="week-day-head">${escapeHtml(formatScheduleDayLabel(dateValue))}</div>`)
+    .join("");
+  const slotRows = RESERVATION_TIME_SLOTS.map((time) => {
+    const cells = weekDates.map((dateValue) => {
+      const isReserved = Boolean(getReservationForSlot(room, dateValue, time));
+      const statusClass = isReserved ? "is-reserved" : "is-available";
+      const statusLabel = isReserved ? "불가능" : "가능";
+
+      return `
+        <div class="week-schedule-cell ${statusClass}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(`${dateValue} ${time} ${statusLabel}`)}"></div>
+      `;
+    }).join("");
+
+    return `
+      <div class="week-time-head">${escapeHtml(time)}</div>
+      ${cells}
+    `;
+  }).join("");
+
+  reservationStatusBoard.innerHTML = `
+    <header class="schedule-board-head">
+      <div>
+        <p>Weekly Status</p>
+        <div class="schedule-title-row">
+          <h3>${escapeHtml(room || "공간 선택")}</h3>
+          ${requestToggle}
+        </div>
+      </div>
+      <span>${escapeHtml(weekDates[0])} ~ ${escapeHtml(weekEndDate)}</span>
+    </header>
+    <div class="week-schedule-wrap">
+      <div class="week-schedule-grid">
+        <div class="week-corner">시간</div>
+        ${dayHeaders}
+        ${slotRows}
+      </div>
+    </div>
+    <div class="schedule-legend" aria-label="예약 상태 설명">
+      <span><i class="is-available"></i> 가능</span>
+      <span><i class="is-reserved"></i> 불가능</span>
+    </div>
+  `;
+}
+
+renderReservationSchedule = renderReservationScheduleCompact;
 
 function openReservationModal() {
   if (!reservationModal) {
     return;
   }
 
-  // Reset inner tabs inside notices panel to "board" (Notices)
-  document.querySelectorAll(".notice-tab-btn").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.noticeTab === "board");
-  });
-  const tabBoard = document.querySelector("#notice-tab-board");
-  const tabStatus = document.querySelector("#notice-tab-status");
-  if (tabBoard) tabBoard.hidden = false;
-  if (tabStatus) tabStatus.hidden = true;
+  const initialReservationTab = window.innerWidth <= 768 ? "form" : "notices";
+  reservationRequestsVisible = false;
 
-  // Reset mobile tabs to "notices"
   if (reservationTabs) {
     reservationTabs.querySelectorAll(".reservation-tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.resTab === "notices");
+      tab.classList.toggle("is-active", tab.dataset.resTab === initialReservationTab);
     });
   }
   if (resModalBody) {
-    resModalBody.className = "reservation-modal-body show-notices";
+    resModalBody.className = `reservation-modal-body show-${initialReservationTab}`;
   }
 
+  if (reservationDateInput && !reservationDateInput.value) {
+    reservationDateInput.value = getLocalDateValue();
+  }
+
+  renderReservationSchedule();
   renderReservationAdminPanel();
-  renderNotices();
 
   reservationModal.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1489,10 +1883,25 @@ function closeReservationModal() {
 }
 
 if (reservationDateInput) {
-  const today = new Date();
-  today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-  reservationDateInput.min = today.toISOString().slice(0, 10);
+  reservationDateInput.min = getLocalDateValue();
 }
+
+[reservationRoomInput, reservationDateInput, reservationTimeInput].forEach((input) => {
+  input?.addEventListener("change", renderReservationSchedule);
+  input?.addEventListener("input", renderReservationSchedule);
+});
+
+reservationStatusBoard?.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-reservation-requests-toggle]");
+
+  if (!toggleButton) {
+    return;
+  }
+
+  reservationRequestsVisible = !reservationRequestsVisible;
+  renderReservationSchedule();
+  renderReservationAdminPanel();
+});
 
 soonLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
@@ -1587,6 +1996,12 @@ reservationForm?.addEventListener("submit", async (event) => {
     status: "pending",
   };
 
+  if (getReservationForSlot(reservation.room, reservation.date, reservation.time)) {
+    showToast("이미 예약된 시간입니다. 다른 시간을 선택해 주세요.");
+    renderReservationSchedule();
+    return;
+  }
+
   const saved = await addReservation(reservation);
 
   if (!saved) {
@@ -1594,6 +2009,7 @@ reservationForm?.addEventListener("submit", async (event) => {
   }
 
   renderReservationAdminPanel();
+  renderReservationSchedule();
   closeReservationModal();
   reservationForm.reset();
   showToast("과학실 예약 요청이 접수되었습니다.");
@@ -1607,6 +2023,7 @@ reservationClearButton?.addEventListener("click", async () => {
   }
 
   renderReservationAdminPanel();
+  renderReservationSchedule();
   showToast("예약 요청 목록을 정리했습니다.");
 });
 
@@ -1655,16 +2072,24 @@ reservationTabs?.addEventListener("click", (event) => {
 });
 
 window.addEventListener("science-lab-auth-change", () => {
+  renderDashboard();
+  renderReservationSchedule();
   renderReservationAdminPanel();
   renderNotices();
 });
 
 async function initializeSupabaseStorage() {
+  const loadedInventoryEdits = await loadSupabaseInventoryEdits();
   const loadedReservations = await loadSupabaseReservations();
   const loadedNotices = await loadSupabaseNotices();
 
+  if (loadedInventoryEdits) {
+    renderDashboard();
+  }
+
   if (loadedReservations) {
     renderReservationAdminPanel();
+    renderReservationSchedule();
   }
 
   if (loadedNotices) {
@@ -1740,7 +2165,32 @@ sortButtons.forEach((button) => {
   });
 });
 
+tableBody.addEventListener("change", (event) => {
+  const field = event.target.closest("[data-edit-field]");
+
+  if (!field) {
+    return;
+  }
+
+  updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
+});
+
+tableBody.addEventListener("focusout", (event) => {
+  const field = event.target.closest("[data-edit-field]");
+
+  if (!field) {
+    return;
+  }
+
+  updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
+});
+
 tableBody.addEventListener("click", (event) => {
+  if (event.target.closest("[data-edit-field]")) {
+    event.stopPropagation();
+    return;
+  }
+
   const row = event.target.closest("[data-item-id]");
 
   if (!row) {
@@ -1751,6 +2201,10 @@ tableBody.addEventListener("click", (event) => {
 });
 
 tableBody.addEventListener("keydown", (event) => {
+  if (event.target.closest("[data-edit-field]")) {
+    return;
+  }
+
   if (event.key !== "Enter" && event.key !== " ") {
     return;
   }
