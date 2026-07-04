@@ -2982,13 +2982,15 @@ body.prep-theme-light .admin-role-chip {
   padding: 20px;
   background: rgba(8, 13, 17, 0.68);
   backdrop-filter: blur(10px);
+  overflow-y: auto;
 }
 
 .modal-content {
   width: min(100%, 460px);
   max-width: 460px;
+  max-height: calc(100dvh - 40px);
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   color: #15202b;
   border: 1px solid rgba(23, 33, 29, 0.12);
   border-radius: 8px;
@@ -3173,6 +3175,8 @@ body.prep-theme-light .auth-tab.is-active {
 .form-group select,
 .form-group textarea,
 body.prep-theme-light .form-group input {
+  width: 100%;
+  max-width: 100%;
   min-height: 48px;
   padding: 0 13px;
   color: #15202b;
@@ -3506,6 +3510,7 @@ body.prep-theme-light .form-group input {
   display: grid;
   grid-template-columns: 1.15fr 1fr; /* Notice panel on left, reservation form on right */
   background: #ffffff;
+  min-width: 0;
 }
 
 .reservation-notice-section {
@@ -3742,8 +3747,17 @@ body.is-admin .notice-delete-btn {
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .modal-content {
+    max-height: calc(100dvh - 24px);
+  }
+
   .reservation-modal-content {
-    width: min(100%, 520px);
+    width: 100%;
     max-width: 520px;
   }
 
@@ -3852,34 +3866,25 @@ body.is-admin .notice-delete-btn {
 
 .credits-board {
   min-height: 260px;
-  padding: 18px 10px 34px;
+  padding: 18px 10px 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 26px;
   color: #d9d9de;
 }
 
-.credit-lead,
-.credit-support {
+.credit-row {
   width: 100%;
-  max-width: 640px;
+  max-width: 760px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 12px;
   text-align: center;
 }
 
-.credit-lead {
-  gap: 16px;
-}
-
-.credit-support {
-  margin-top: 74px;
-  gap: 34px;
-}
-
-.credit-lead span,
-.credit-support span {
+.credit-row span {
   color: #c9c9cf;
   font-size: 0.88rem;
   font-weight: 700;
@@ -3895,10 +3900,11 @@ body.is-admin .notice-delete-btn {
 
 .credit-names {
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(56px, 1fr));
+  display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: center;
+  gap: 10px 18px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 768px) {
@@ -3909,15 +3915,10 @@ body.is-admin .notice-delete-btn {
   .credits-board {
     min-height: 240px;
     padding-inline: 0;
-  }
-
-  .credit-support {
-    margin-top: 56px;
-    gap: 28px;
+    gap: 24px;
   }
 
   .credit-names {
-    grid-template-columns: repeat(2, minmax(80px, 1fr));
-    row-gap: 28px;
+    gap: 10px 14px;
   }
 }
