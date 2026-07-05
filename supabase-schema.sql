@@ -8,6 +8,7 @@ create table if not exists public.science_lab_reservations (
   applicant_name text,
   purpose text,
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  status_reason text,
   created_at text not null,
   created_at_sort timestamptz not null default now()
 );
@@ -17,7 +18,8 @@ alter table public.science_lab_reservations
 
 alter table public.science_lab_reservations
   add column if not exists applicant_student_id text,
-  add column if not exists applicant_name text;
+  add column if not exists applicant_name text,
+  add column if not exists status_reason text;
 
 do $$
 begin
@@ -53,7 +55,7 @@ alter table public.science_lab_inventory_edits enable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select, insert on public.science_lab_reservations to anon, authenticated;
-grant update (status), delete on public.science_lab_reservations to authenticated;
+grant update (status, status_reason), delete on public.science_lab_reservations to authenticated;
 grant select on public.science_lab_notices to anon, authenticated;
 grant insert, delete on public.science_lab_notices to authenticated;
 grant select on public.science_lab_inventory_edits to anon, authenticated;

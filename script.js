@@ -1199,7 +1199,7 @@ async function loadSupabaseReservations() {
   try {
     const { data, error } = await client
       .from(SUPABASE_RESERVATIONS_TABLE)
-      .select("id, room, date, time, class_name, applicant_student_id, applicant_name, purpose, created_at, status")
+      .select("id, room, date, time, class_name, applicant_student_id, applicant_name, purpose, created_at, status, status_reason")
       .order("created_at_sort", { ascending: false });
 
     if (error) {
@@ -1217,6 +1217,7 @@ async function loadSupabaseReservations() {
       purpose: reservation.purpose,
       createdAt: reservation.created_at,
       status: reservation.status || "pending",
+      statusReason: reservation.status_reason || "",
     }));
     reservationStorageMode = "supabase";
     return true;
@@ -1246,6 +1247,7 @@ async function addReservation(reservation) {
       purpose: reservation.purpose,
       created_at: reservation.createdAt,
       status: reservation.status || "pending",
+      status_reason: reservation.statusReason || null,
     });
 
     if (error) {
@@ -1300,13 +1302,20 @@ function getReservationStatus(status) {
   return ["pending", "approved", "rejected"].includes(status) ? status : "pending";
 }
 
-async function updateReservationStatus(id, status) {
+async function updateReservationStatus(id, status, statusReason = "") {
   if (!isReservationAdmin()) {
     showToast("관리자만 예약 요청을 처리할 수 있습니다.");
     return false;
   }
 
   if (!["approved", "rejected"].includes(status)) {
+    return false;
+  }
+
+  const normalizedReason = String(statusReason || "").trim();
+
+  if (status === "rejected" && !normalizedReason) {
+    showToast("거절 사유를 입력해 주세요.");
     return false;
   }
 
@@ -1320,7 +1329,7 @@ async function updateReservationStatus(id, status) {
   try {
     const { error } = await client
       .from(SUPABASE_RESERVATIONS_TABLE)
-      .update({ status })
+      .update({ status, status_reason: status === "rejected" ? normalizedReason : null })
       .eq("id", id);
 
     if (error) {
@@ -1329,7 +1338,7 @@ async function updateReservationStatus(id, status) {
 
     reservationStorageMode = "supabase";
     reservationCache = reservationCache.map((reservation) => (
-      reservation.id === id ? { ...reservation, status } : reservation
+      reservation.id === id ? { ...reservation, status, statusReason: status === "rejected" ? normalizedReason : "" } : reservation
     ));
     return true;
   } catch (error) {
@@ -1600,18 +1609,15 @@ function renderReservationAdminPanel() {
   }
 
   const isAdmin = isReservationAdmin();
-  reservationAdminPanel.hidden = !isAdmin;
-
-  if (!isAdmin) {
-    reservationList.innerHTML = "";
-    return;
-  }
+  reservationAdminPanel.hidden = false;
 
   if (reservationClearButton) {
     reservationClearButton.hidden = !isAdmin;
   }
 
-  const reservations = getSavedReservations();
+  const reservations = isAdmin
+    ? getSavedReservations()
+    : getSavedReservations().filter((reservation) => getReservationStatus(reservation.status) !== "pending");
   const statusText = {
     pending: "대기",
     approved: "수락",
@@ -1620,7 +1626,7 @@ function renderReservationAdminPanel() {
 
   if (!reservations.length) {
     reservationList.innerHTML = `
-      <p class="reservation-empty">아직 접수된 예약 요청이 없습니다.</p>
+      <p class="reservation-empty">${isAdmin ? "아직 접수된 예약 요청이 없습니다." : "아직 처리된 예약 요청이 없습니다."}</p>
     `;
     return;
   }
@@ -1628,8 +1634,10 @@ function renderReservationAdminPanel() {
   reservationList.innerHTML = reservations
     .map((reservation) => {
       const status = getReservationStatus(reservation.status);
+      const statusReason = String(reservation.statusReason || "").trim();
+      const canReview = isAdmin && status === "pending";
       return `
-      <article class="reservation-request" data-reservation-id="${escapeHtml(reservation.id)}">
+      <article class="reservation-request ${canReview ? "is-clickable" : ""}" data-reservation-id="${escapeHtml(reservation.id)}" ${canReview ? 'tabindex="0" role="button" aria-label="예약 요청 처리 창 열기"' : ""}>
         <div>
           <strong>${escapeHtml(reservation.room)}</strong>
           <span>${escapeHtml(reservation.date)} · ${escapeHtml(reservation.time)}</span>
@@ -1640,8 +1648,15 @@ function renderReservationAdminPanel() {
           <small>${escapeHtml(reservation.createdAt)}</small>
           <span class="reservation-status is-${status}">${escapeHtml(statusText[status])}</span>
         </div>
+        ${status !== "pending" && statusReason ? `
+          <p class="reservation-status-reason">
+            <strong>처리 사유</strong>
+            <span>${escapeHtml(statusReason)}</span>
+          </p>
+        ` : ""}
         ${isAdmin && status === "pending" ? `
           <div class="reservation-actions" aria-label="예약 요청 처리">
+            <textarea class="reservation-reason-input" data-reservation-reason placeholder="거절할 때만 사유를 입력하세요."></textarea>
             <button type="button" class="reservation-action is-approve" data-reservation-status="approved">수락</button>
             <button type="button" class="reservation-action is-reject" data-reservation-status="rejected">거절</button>
           </div>
@@ -1660,7 +1675,8 @@ function renderReservationAdminPanel() {
         return;
       }
 
-      const updated = await updateReservationStatus(request.dataset.reservationId, status);
+      const reasonInput = request.querySelector("[data-reservation-reason]");
+      const updated = await updateReservationStatus(request.dataset.reservationId, status, reasonInput?.value);
 
       if (!updated) {
         return;
@@ -1671,6 +1687,97 @@ function renderReservationAdminPanel() {
       showToast(status === "approved" ? "예약 요청을 수락했습니다." : "예약 요청을 거절했습니다.");
     });
   });
+
+  reservationList.querySelectorAll(".reservation-request.is-clickable").forEach((request) => {
+    request.addEventListener("click", () => {
+      openReservationDecisionDialog(request.dataset.reservationId);
+    });
+
+    request.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      openReservationDecisionDialog(request.dataset.reservationId);
+    });
+  });
+}
+
+function closeReservationDecisionDialog() {
+  document.querySelector("#reservation-decision-dialog")?.remove();
+}
+
+function openReservationDecisionDialog(reservationId) {
+  if (!isReservationAdmin()) {
+    return;
+  }
+
+  const reservation = getSavedReservations().find((item) => item.id === reservationId);
+
+  if (!reservation || getReservationStatus(reservation.status) !== "pending") {
+    return;
+  }
+
+  closeReservationDecisionDialog();
+
+  const dialog = document.createElement("div");
+  dialog.className = "reservation-decision-overlay";
+  dialog.id = "reservation-decision-dialog";
+  dialog.innerHTML = `
+    <section class="reservation-decision-dialog" role="dialog" aria-modal="true" aria-labelledby="reservation-decision-title">
+      <header>
+        <div>
+          <p>Reservation Review</p>
+          <h3 id="reservation-decision-title">예약 요청 처리</h3>
+        </div>
+        <button type="button" class="reservation-decision-close" data-decision-close aria-label="닫기">×</button>
+      </header>
+      <div class="reservation-decision-summary">
+        <strong>${escapeHtml(reservation.room)} · ${escapeHtml(reservation.date)} · ${escapeHtml(reservation.time)}</strong>
+        <span>${escapeHtml(reservation.className || "학급 미입력")} / ${escapeHtml(reservation.purpose || "사용 목적 미입력")}</span>
+        <span>신청자: ${escapeHtml(reservation.applicantStudentId || "학번 미입력")} · ${escapeHtml(reservation.applicantName || "이름 미입력")}</span>
+      </div>
+      <label class="reservation-decision-reason">
+        <span>거절 사유</span>
+        <textarea data-decision-reason placeholder="거절할 때만 사유를 입력하세요."></textarea>
+      </label>
+      <div class="reservation-decision-actions">
+        <button type="button" class="reservation-action is-approve" data-decision-status="approved">수락</button>
+        <button type="button" class="reservation-action is-reject" data-decision-status="rejected">거절</button>
+      </div>
+    </section>
+  `;
+
+  document.body.appendChild(dialog);
+
+  dialog.addEventListener("click", async (event) => {
+    if (event.target === dialog || event.target.closest("[data-decision-close]")) {
+      closeReservationDecisionDialog();
+      return;
+    }
+
+    const statusButton = event.target.closest("[data-decision-status]");
+
+    if (!statusButton) {
+      return;
+    }
+
+    const status = statusButton.dataset.decisionStatus;
+    const reason = dialog.querySelector("[data-decision-reason]")?.value;
+    const updated = await updateReservationStatus(reservationId, status, reason);
+
+    if (!updated) {
+      return;
+    }
+
+    closeReservationDecisionDialog();
+    renderReservationAdminPanel();
+    renderReservationSchedule();
+    showToast(status === "approved" ? "예약 요청을 수락했습니다." : "예약 요청을 거절했습니다.");
+  });
+
+  dialog.querySelector("[data-decision-reason]")?.focus();
 }
 
 function isActiveReservationForSlot(reservation, room, date, time) {
@@ -1790,9 +1897,12 @@ function renderReservationScheduleCompact() {
   const pendingRequestCount = reservations.filter((reservation) => (
     getReservationStatus(reservation.status) === "pending"
   )).length;
+  const visibleRequestCount = isAdmin
+    ? reservations.length
+    : reservations.filter((reservation) => getReservationStatus(reservation.status) !== "pending").length;
   const requestSummary = isAdmin
     ? `접수 ${reservations.length}건${pendingRequestCount ? ` · 대기 ${pendingRequestCount}건` : ""}`
-    : "관리자 전용";
+    : `처리 완료 ${visibleRequestCount}건`;
 
   reservationStatusBoard.innerHTML = `
     <header class="schedule-board-head request-board-head">
@@ -1804,7 +1914,6 @@ function renderReservationScheduleCompact() {
       </div>
       <span>${escapeHtml(requestSummary)}</span>
     </header>
-    ${isAdmin ? "" : `<p class="schedule-empty">관리자로 로그인하면 접수된 예약 요청을 확인할 수 있습니다.</p>`}
   `;
 }
 
