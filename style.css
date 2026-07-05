@@ -2649,13 +2649,12 @@ body.prep-theme-light .reagent-table tr[data-item-id]:focus-visible {
   .header-actions .nav-auth-link,
   .theme-toggle,
   .menu-button {
-    width: 32px;
-    min-width: 32px;
     height: 32px;
   }
 
   .header-actions {
-    gap: 5px;
+    gap: 7px;
+    min-width: 124px;
   }
 
   .site-header .theme-toggle {
@@ -2663,32 +2662,44 @@ body.prep-theme-light .reagent-table tr[data-item-id]:focus-visible {
   }
 
   .header-actions .nav-auth-link {
+    min-width: 58px;
+    height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
-    padding: 0;
-    color: transparent;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    color: #ffffff;
+    background: #252528;
+    font-size: 0.78rem;
+    line-height: 1;
+    white-space: nowrap;
   }
 
   .header-actions .nav-account {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    min-width: 32px;
+    width: auto;
+    min-width: 66px;
     height: 32px;
-    padding: 0;
-    border-radius: 8px;
-    overflow: hidden;
+    gap: 6px;
+    padding: 0 9px 0 6px;
+    border-radius: 999px;
+    overflow: visible;
   }
 
   .header-actions .nav-account span:not(.account-avatar) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    color: inherit;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
   }
 
   .header-actions .account-avatar {
@@ -2698,13 +2709,49 @@ body.prep-theme-light .reagent-table tr[data-item-id]:focus-visible {
   }
 
   .header-actions .nav-auth-link::before {
-    content: "";
-    display: block;
-    width: 16px;
-    height: 16px;
-    border: 3px solid #ffffff;
-    border-radius: 50%;
-    box-shadow: 0 12px 0 -6px #ffffff;
+    content: none;
+  }
+
+  .menu-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .menu-button span {
+    width: 21px;
+    height: 3px;
+  }
+
+  .auth-modal-content {
+    width: min(100%, 390px);
+    border-radius: 14px;
+  }
+
+  .auth-modal-content .modal-header {
+    padding: 20px 18px 14px;
+  }
+
+  .auth-modal-content .modal-header h2 {
+    font-size: 1.34rem;
+  }
+
+  .auth-modal-content .modal-subtitle {
+    font-size: 0.82rem;
+  }
+
+  .auth-modal-content .auth-tabs {
+    margin: 14px 18px 0;
+  }
+
+  .auth-modal-content .modal-form {
+    padding: 16px 18px 20px;
+  }
+
+  .auth-modal-content .form-group input {
+    min-height: 46px;
+    border-radius: 10px;
   }
 
   .section-head h2 {
