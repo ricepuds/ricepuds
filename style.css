@@ -4751,9 +4751,109 @@ body.is-admin .notice-delete-btn {
   text-shadow: 0 0 18px rgba(169, 149, 255, 0.22);
 }
 
-body.site-theme-light .credit-names .credit-gradient-name,
-body.site-theme-dark .credit-names .credit-gradient-name {
+.credit-names .credit-blue-gradient-name {
   color: transparent;
+  background: linear-gradient(90deg, #bae6fd 0%, #38bdf8 44%, #2563eb 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 18px rgba(56, 189, 248, 0.28);
+}
+
+.credit-names .credit-navy-gradient-name {
+  color: transparent;
+  background: linear-gradient(90deg, #c7d2fe 0%, #1e3a8a 48%, #0f172a 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 16px rgba(30, 58, 138, 0.32);
+}
+
+.credit-names .credit-red-gradient-name {
+  color: transparent;
+  background: linear-gradient(90deg, #fecaca 0%, #ef4444 46%, #991b1b 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 16px rgba(239, 68, 68, 0.28);
+}
+
+.credit-names .credit-green-gradient-name {
+  color: transparent;
+  background: linear-gradient(90deg, #bbf7d0 0%, #22c55e 48%, #166534 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 16px rgba(34, 197, 94, 0.26);
+}
+
+.credit-winged-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credit-winged-name::before,
+.credit-winged-name::after {
+  content: "🪽";
+  font-size: 0.9em;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.38));
+}
+
+.credit-winged-name::before {
+  transform: scaleX(-1);
+}
+
+body.site-theme-light .credit-names .credit-gradient-name,
+body.site-theme-dark .credit-names .credit-gradient-name,
+body.site-theme-light .credit-names .credit-blue-gradient-name,
+body.site-theme-dark .credit-names .credit-blue-gradient-name,
+body.site-theme-light .credit-names .credit-navy-gradient-name,
+body.site-theme-dark .credit-names .credit-navy-gradient-name,
+body.site-theme-light .credit-names .credit-red-gradient-name,
+body.site-theme-dark .credit-names .credit-red-gradient-name,
+body.site-theme-light .credit-names .credit-green-gradient-name,
+body.site-theme-dark .credit-names .credit-green-gradient-name {
+  color: transparent;
+}
+
+body.site-theme-light .credit-names .credit-gradient-name {
+  background: linear-gradient(90deg, #7c3aed 0%, #8b5cf6 50%, #4f46e5 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(124, 58, 237, 0.18);
+}
+
+body.site-theme-light .credit-names .credit-blue-gradient-name {
+  background: linear-gradient(90deg, #0284c7 0%, #2563eb 52%, #1e40af 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(37, 99, 235, 0.18);
+}
+
+body.site-theme-light .credit-names .credit-navy-gradient-name {
+  background: linear-gradient(90deg, #1e40af 0%, #1e3a8a 52%, #0f172a 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(30, 58, 138, 0.18);
+}
+
+body.site-theme-dark .credit-names .credit-navy-gradient-name {
+  background: linear-gradient(90deg, #dbeafe 0%, #60a5fa 46%, #818cf8 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 14px rgba(96, 165, 250, 0.3);
+}
+
+body.site-theme-light .credit-names .credit-red-gradient-name {
+  background: linear-gradient(90deg, #dc2626 0%, #b91c1c 52%, #7f1d1d 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(220, 38, 38, 0.18);
+}
+
+body.site-theme-light .credit-names .credit-green-gradient-name {
+  background: linear-gradient(90deg, #16a34a 0%, #15803d 52%, #14532d 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(22, 163, 74, 0.18);
 }
 
 .credit-names {
