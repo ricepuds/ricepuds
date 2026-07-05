@@ -1546,10 +1546,10 @@ function renderNotices() {
 async function addNotice(content) {
   if (!isReservationAdmin()) {
     showToast("관리자만 공지사항을 등록할 수 있습니다.");
-    return;
+    return false;
   }
 
-  if (!content.trim()) return;
+  if (!content.trim()) return false;
   const createdAt = new Date().toLocaleString("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -1562,12 +1562,13 @@ async function addNotice(content) {
   };
 
   if (!await saveNoticeToSupabase(notice)) {
-    return;
+    return false;
   }
 
   noticeCache = [notice, ...noticeCache.filter((item) => !DEFAULT_NOTICES.some((defaultNotice) => defaultNotice.id === item.id))];
   renderNotices();
-  showToast("새 공지사항이 등록되었습니다.");
+  showToast("공지사항이 Supabase에 저장되었습니다.");
+  return true;
 }
 
 async function deleteNotice(id) {
@@ -1983,7 +1984,7 @@ reservationClearButton?.addEventListener("click", async () => {
 });
 
 // Admin notice form submit
-adminNoticeForm?.addEventListener("submit", (event) => {
+adminNoticeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!isReservationAdmin()) {
     showToast("관리자만 공지사항을 등록할 수 있습니다.");
@@ -1991,8 +1992,11 @@ adminNoticeForm?.addEventListener("submit", (event) => {
   }
 
   if (adminNoticeInput) {
-    addNotice(adminNoticeInput.value);
-    adminNoticeInput.value = "";
+    const saved = await addNotice(adminNoticeInput.value);
+
+    if (saved) {
+      adminNoticeInput.value = "";
+    }
   }
 });
 

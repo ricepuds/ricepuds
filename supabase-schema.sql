@@ -91,13 +91,15 @@ create policy "Anyone can read science lab notices"
   using (true);
 
 drop policy if exists "Authenticated users can create science lab notices" on public.science_lab_notices;
-create policy "Authenticated users can create science lab notices"
+drop policy if exists "Admins can create science lab notices" on public.science_lab_notices;
+create policy "Admins can create science lab notices"
   on public.science_lab_notices
   for insert
   with check (lower(auth.jwt() ->> 'email') = 'rices2114@gmail.com');
 
 drop policy if exists "Authenticated users can delete science lab notices" on public.science_lab_notices;
-create policy "Authenticated users can delete science lab notices"
+drop policy if exists "Admins can delete science lab notices" on public.science_lab_notices;
+create policy "Admins can delete science lab notices"
   on public.science_lab_notices
   for delete
   using (lower(auth.jwt() ->> 'email') = 'rices2114@gmail.com');
