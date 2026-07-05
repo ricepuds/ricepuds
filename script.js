@@ -84,7 +84,6 @@ let inventoryItems = [];
 let toastTimer;
 let selectedItemId = "";
 let cabinetViewer;
-let reservationRequestsVisible = false;
 const INVENTORY_EDITS_STORAGE_KEY = "science-lab-inventory-edits";
 
 try {
@@ -1600,7 +1599,7 @@ function renderReservationAdminPanel() {
   }
 
   const isAdmin = isReservationAdmin();
-  reservationAdminPanel.hidden = !isAdmin || !reservationRequestsVisible;
+  reservationAdminPanel.hidden = !isAdmin;
 
   if (!isAdmin) {
     reservationList.innerHTML = "";
@@ -1785,57 +1784,26 @@ function renderReservationScheduleCompact() {
   }
 
   const room = reservationRoomInput?.value || "";
-  const startDate = reservationDateInput?.value || getLocalDateValue();
-  const weekDates = getWeekdayScheduleDates(startDate);
-  const pendingRequestCount = getSavedReservations().filter((reservation) => (
+  const isAdmin = isReservationAdmin();
+  const reservations = getSavedReservations();
+  const pendingRequestCount = reservations.filter((reservation) => (
     getReservationStatus(reservation.status) === "pending"
   )).length;
-  const requestToggle = isReservationAdmin()
-    ? `<button type="button" class="schedule-request-toggle" data-reservation-requests-toggle aria-expanded="${String(reservationRequestsVisible)}">예약 요청${pendingRequestCount ? ` ${pendingRequestCount}` : ""}</button>`
-    : "";
-  const weekEndDate = weekDates[weekDates.length - 1];
-  const dayHeaders = weekDates
-    .map((dateValue) => `<div class="week-day-head">${escapeHtml(formatScheduleDayLabel(dateValue))}</div>`)
-    .join("");
-  const slotRows = RESERVATION_TIME_SLOTS.map((time) => {
-    const cells = weekDates.map((dateValue) => {
-      const isReserved = Boolean(getReservationForSlot(room, dateValue, time));
-      const statusClass = isReserved ? "is-reserved" : "is-available";
-      const statusLabel = isReserved ? "불가능" : "가능";
-
-      return `
-        <div class="week-schedule-cell ${statusClass}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(`${dateValue} ${time} ${statusLabel}`)}"></div>
-      `;
-    }).join("");
-
-    return `
-      <div class="week-time-head">${escapeHtml(time)}</div>
-      ${cells}
-    `;
-  }).join("");
+  const requestSummary = isAdmin
+    ? `접수 ${reservations.length}건${pendingRequestCount ? ` · 대기 ${pendingRequestCount}건` : ""}`
+    : "관리자 전용";
 
   reservationStatusBoard.innerHTML = `
-    <header class="schedule-board-head">
+    <header class="schedule-board-head request-board-head">
       <div>
-        <p>Weekly Status</p>
+        <p>Reservation Requests</p>
         <div class="schedule-title-row">
           <h3>${escapeHtml(room || "공간 선택")}</h3>
-          ${requestToggle}
         </div>
       </div>
-      <span>${escapeHtml(weekDates[0])} ~ ${escapeHtml(weekEndDate)}</span>
+      <span>${escapeHtml(requestSummary)}</span>
     </header>
-    <div class="week-schedule-wrap">
-      <div class="week-schedule-grid">
-        <div class="week-corner">시간</div>
-        ${dayHeaders}
-        ${slotRows}
-      </div>
-    </div>
-    <div class="schedule-legend" aria-label="예약 상태 설명">
-      <span><i class="is-available"></i> 가능</span>
-      <span><i class="is-reserved"></i> 불가능</span>
-    </div>
+    ${isAdmin ? "" : `<p class="schedule-empty">관리자로 로그인하면 접수된 예약 요청을 확인할 수 있습니다.</p>`}
   `;
 }
 
@@ -1847,7 +1815,6 @@ function openReservationModal() {
   }
 
   const initialReservationTab = window.innerWidth <= 768 ? "form" : "notices";
-  reservationRequestsVisible = false;
 
   if (reservationTabs) {
     reservationTabs.querySelectorAll(".reservation-tab").forEach((tab) => {
@@ -1889,18 +1856,6 @@ if (reservationDateInput) {
 [reservationRoomInput, reservationDateInput, reservationTimeInput].forEach((input) => {
   input?.addEventListener("change", renderReservationSchedule);
   input?.addEventListener("input", renderReservationSchedule);
-});
-
-reservationStatusBoard?.addEventListener("click", (event) => {
-  const toggleButton = event.target.closest("[data-reservation-requests-toggle]");
-
-  if (!toggleButton) {
-    return;
-  }
-
-  reservationRequestsVisible = !reservationRequestsVisible;
-  renderReservationSchedule();
-  renderReservationAdminPanel();
 });
 
 soonLinks.forEach((link) => {
