@@ -2045,6 +2045,57 @@ body.site-theme-light .mobile-menu-nav a:focus-visible {
   background: #eef3f0;
 }
 
+body.site-theme-light .about-page {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+body.site-theme-light .about-page-section h2 {
+  color: var(--ink);
+  border-bottom-color: rgba(23, 33, 29, 0.14);
+}
+
+body.site-theme-light .about-page-notice-box {
+  border-color: rgba(23, 33, 29, 0.12);
+  background: #fffdf7;
+}
+
+body.site-theme-light .about-page-notice-item {
+  border-bottom-color: rgba(23, 33, 29, 0.14);
+}
+
+body.site-theme-light .about-page-notice-content {
+  color: #24302b;
+}
+
+body.site-theme-light .about-page-notice-date,
+body.site-theme-light .credit-row span {
+  color: #66706a;
+}
+
+body.site-theme-light .credits-board {
+  color: #24302b;
+}
+
+body.site-theme-light .credit-lead strong,
+body.site-theme-light .credit-names strong {
+  color: #17211d;
+}
+
+body.site-theme-light .admin-notice-form {
+  border-top-color: rgba(23, 33, 29, 0.14);
+}
+
+body.site-theme-light .admin-notice-form input {
+  color: #17211d;
+  border-color: #d9d2c5;
+  background: #ffffff;
+}
+
+body.site-theme-light .admin-notice-form input:focus {
+  border-color: #1b6b5f;
+}
+
 body.site-theme-dark {
   color: #f4f8fb;
   background:
@@ -2130,6 +2181,53 @@ body.site-theme-dark .hero-banner .hero-visual {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+body.site-theme-dark .about-page {
+  color: #f4f8fb;
+  background: #0f171f;
+}
+
+body.site-theme-dark .about-page-section h2 {
+  color: #f4f8fb;
+  border-bottom-color: #2a3946;
+}
+
+body.site-theme-dark .about-page-notice-box {
+  border-color: #2a3946;
+  background: rgba(22, 33, 43, 0.88);
+}
+
+body.site-theme-dark .about-page-notice-item {
+  border-bottom-color: #2a3946;
+}
+
+body.site-theme-dark .about-page-notice-content {
+  color: #e5edf5;
+}
+
+body.site-theme-dark .about-page-notice-date,
+body.site-theme-dark .credit-row span {
+  color: #aab6c2;
+}
+
+body.site-theme-dark .credits-board {
+  color: #d9e2ea;
+}
+
+body.site-theme-dark .credit-lead strong,
+body.site-theme-dark .credit-names strong {
+  color: #f4f8fb;
+}
+
+body.site-theme-dark .admin-notice-form {
+  border-top-color: #2a3946;
+}
+
+body.site-theme-dark .admin-notice-form input {
+  color: #f4f8fb;
+  border-color: #405366;
+  background: #121d26;
 }
 
 body.site-theme-dark .hero .eyebrow,
@@ -4651,6 +4749,11 @@ body.is-admin .notice-delete-btn {
   background-clip: text;
   -webkit-background-clip: text;
   text-shadow: 0 0 18px rgba(169, 149, 255, 0.22);
+}
+
+body.site-theme-light .credit-names .credit-gradient-name,
+body.site-theme-dark .credit-names .credit-gradient-name {
+  color: transparent;
 }
 
 .credit-names {
