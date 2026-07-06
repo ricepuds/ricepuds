@@ -1087,6 +1087,7 @@ let inventoryEditsCache = {};
 let reservationStorageMode = "local";
 let noticeStorageMode = "local";
 let inventoryEditsStorageMode = "local";
+let reservationListView = "pending";
 
 function getSupabaseStorageClient() {
   return window.scienceLabSupabase || null;
@@ -1296,6 +1297,45 @@ async function clearReservations() {
 
 function isReservationAdmin() {
   return document.body.classList.contains("is-admin");
+}
+
+async function deleteReservation(id) {
+  if (!isReservationAdmin()) {
+    showToast("관리자만 예약 요청을 삭제할 수 있습니다.");
+    return false;
+  }
+
+  const client = getSupabaseStorageClient();
+
+  if (!client) {
+    showToast("Supabase 연결이 없어 예약 요청을 삭제하지 못했습니다.");
+    return false;
+  }
+
+  try {
+    const { error } = await client.from(SUPABASE_RESERVATIONS_TABLE).delete().eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    reservationStorageMode = "supabase";
+    reservationCache = reservationCache.filter((reservation) => reservation.id !== id);
+    return true;
+  } catch (error) {
+    console.warn("Supabase reservation delete failed", error);
+    showToast("예약 요청을 삭제하지 못했습니다. 관리자 권한/RLS 설정을 확인해 주세요.");
+    return false;
+  }
+}
+
+function bindReservationListTabs() {
+  reservationList?.querySelectorAll("[data-reservation-list-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      reservationListView = button.dataset.reservationListView || "pending";
+      renderReservationAdminPanel();
+    });
+  });
 }
 
 function getReservationStatus(status) {
@@ -1626,9 +1666,23 @@ function renderReservationAdminPanel() {
     reservationClearButton.hidden = !isAdmin;
   }
 
-  const reservations = isAdmin
-    ? getSavedReservations()
-    : getSavedReservations().filter((reservation) => getReservationStatus(reservation.status) !== "pending");
+  const allReservations = getSavedReservations();
+  const pendingReservations = allReservations.filter((reservation) => getReservationStatus(reservation.status) === "pending");
+  const completedReservations = allReservations.filter((reservation) => getReservationStatus(reservation.status) !== "pending");
+
+  const reservations = reservationListView === "pending" ? pendingReservations : completedReservations;
+  const pendingTabLabel = isAdmin ? "예약요청" : "대기중";
+  const completedTabLabel = isAdmin ? "완료된 예약" : "완료됨";
+  const reservationListTabs = `
+    <div class="reservation-list-tabs" role="tablist" aria-label="예약 목록 구분">
+      <button type="button" class="${reservationListView === "pending" ? "is-active" : ""}" data-reservation-list-view="pending">
+        ${pendingTabLabel} <span>${pendingReservations.length}</span>
+      </button>
+      <button type="button" class="${reservationListView === "completed" ? "is-active" : ""}" data-reservation-list-view="completed">
+        ${completedTabLabel} <span>${completedReservations.length}</span>
+      </button>
+    </div>
+  `;
   const statusText = {
     pending: "대기",
     approved: "수락",
@@ -1637,12 +1691,14 @@ function renderReservationAdminPanel() {
 
   if (!reservations.length) {
     reservationList.innerHTML = `
-      <p class="reservation-empty">${isAdmin ? "아직 접수된 예약 요청이 없습니다." : "아직 처리된 예약 요청이 없습니다."}</p>
+      ${reservationListTabs}
+      <p class="reservation-empty">${reservationListView === "pending" ? "대기중인 예약 요청이 없습니다." : "완료된 예약 요청이 없습니다."}</p>
     `;
+    bindReservationListTabs();
     return;
   }
 
-  reservationList.innerHTML = reservations
+  reservationList.innerHTML = reservationListTabs + reservations
     .map((reservation) => {
       const status = getReservationStatus(reservation.status);
       const statusReason = String(reservation.statusReason || "").trim();
@@ -1658,6 +1714,7 @@ function renderReservationAdminPanel() {
         <div class="reservation-request-footer">
           <small>${escapeHtml(reservation.createdAt)}</small>
           <span class="reservation-status is-${status}">${escapeHtml(statusText[status])}</span>
+          ${isAdmin ? `<button type="button" class="reservation-delete-btn" data-reservation-delete aria-label="예약 요청 삭제">삭제</button>` : ""}
         </div>
         ${status !== "pending" && statusReason ? `
           <p class="reservation-status-reason">
@@ -1676,6 +1733,8 @@ function renderReservationAdminPanel() {
     `;
     })
     .join("");
+
+  bindReservationListTabs();
 
   reservationList.querySelectorAll("[data-reservation-status]").forEach((button) => {
     button.addEventListener("click", async (event) => {
@@ -1696,6 +1755,27 @@ function renderReservationAdminPanel() {
       renderReservationAdminPanel();
       renderReservationSchedule();
       showToast(status === "approved" ? "예약 요청을 수락했습니다." : "예약 요청을 거절했습니다.");
+    });
+  });
+
+  reservationList.querySelectorAll("[data-reservation-delete]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const request = event.target.closest("[data-reservation-id]");
+
+      if (!request) {
+        return;
+      }
+
+      const deleted = await deleteReservation(request.dataset.reservationId);
+
+      if (!deleted) {
+        return;
+      }
+
+      renderReservationAdminPanel();
+      renderReservationSchedule();
+      showToast("예약 요청이 삭제되었습니다.");
     });
   });
 

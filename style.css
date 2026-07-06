@@ -3605,6 +3605,40 @@ body.prep-theme-light .form-group input {
   padding-right: 4px;
 }
 
+.reservation-list-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #d9e3eb;
+  border-radius: 8px;
+  background: #eef3f6;
+}
+
+.reservation-list-tabs button {
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  color: #667589;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.reservation-list-tabs button span {
+  margin-left: 4px;
+  color: inherit;
+  font-size: 0.78rem;
+}
+
+.reservation-list-tabs button.is-active {
+  color: #1b6b5f;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
+}
+
 .reservation-request {
   padding: 12px;
   border: 1px solid #d9e3eb;
@@ -3680,6 +3714,10 @@ body.prep-theme-light .form-group input {
   margin-top: 8px;
 }
 
+.reservation-request-footer small {
+  margin-right: auto;
+}
+
 .reservation-status {
   display: inline-flex;
   align-items: center;
@@ -3705,6 +3743,26 @@ body.prep-theme-light .form-group input {
   border-color: #f0c4c4;
   color: #b42318;
   background: #fff1f1;
+}
+
+.reservation-delete-btn {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid #f0c4c4;
+  border-radius: 999px;
+  color: #b42318;
+  background: #fff7f7;
+  font-size: 0.76rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.reservation-delete-btn:hover,
+.reservation-delete-btn:focus-visible {
+  border-color: #ef4444;
+  color: #ffffff;
+  background: #ef4444;
+  outline: none;
 }
 
 .reservation-actions {
