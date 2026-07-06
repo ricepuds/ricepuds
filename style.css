@@ -4816,6 +4816,15 @@ body.is-admin .notice-delete-btn {
   text-shadow: 0 0 18px rgba(169, 149, 255, 0.22);
 }
 
+.credit-names .credit-gradient-name.credit-main-developer-name {
+  font-size: 1rem;
+  font-weight: 900;
+  filter: brightness(1.18) saturate(1.16);
+  text-shadow:
+    0 0 8px rgba(240, 231, 255, 0.28),
+    0 0 18px rgba(169, 149, 255, 0.4);
+}
+
 .credit-names .credit-blue-gradient-name {
   color: transparent;
   background: linear-gradient(90deg, #bae6fd 0%, #38bdf8 44%, #2563eb 100%);
@@ -4848,20 +4857,20 @@ body.is-admin .notice-delete-btn {
   text-shadow: 0 0 16px rgba(34, 197, 94, 0.26);
 }
 
+.credit-names .credit-orange-gradient-name {
+  color: transparent;
+  background: linear-gradient(90deg, #fed7aa 0%, #f97316 48%, #c2410c 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 16px rgba(249, 115, 22, 0.28);
+}
+
 .credit-names .credit-pastel-gradient-name {
   color: transparent;
   background: linear-gradient(135deg, #f7dde6 0%, #f5e9de 45%, #d7f1a5 100%);
   background-clip: text;
   -webkit-background-clip: text;
   text-shadow: 0 0 14px rgba(247, 221, 230, 0.2);
-}
-
-.credit-names .credit-neon-gradient-name {
-  color: transparent;
-  background: linear-gradient(90deg, #003f3f 0%, #008b8b 50%, #7fffd4 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  text-shadow: 0 0 16px rgba(0, 139, 139, 0.34);
 }
 
 .credit-winged-name {
@@ -4892,6 +4901,8 @@ body.site-theme-light .credit-names .credit-red-gradient-name,
 body.site-theme-dark .credit-names .credit-red-gradient-name,
 body.site-theme-light .credit-names .credit-green-gradient-name,
 body.site-theme-dark .credit-names .credit-green-gradient-name,
+body.site-theme-light .credit-names .credit-orange-gradient-name,
+body.site-theme-dark .credit-names .credit-orange-gradient-name,
 body.site-theme-light .credit-names .credit-pastel-gradient-name,
 body.site-theme-dark .credit-names .credit-pastel-gradient-name {
   color: transparent;
@@ -4937,6 +4948,13 @@ body.site-theme-light .credit-names .credit-green-gradient-name {
   background-clip: text;
   -webkit-background-clip: text;
   text-shadow: 0 0 10px rgba(22, 163, 74, 0.18);
+}
+
+body.site-theme-light .credit-names .credit-orange-gradient-name {
+  background: linear-gradient(90deg, #ea580c 0%, #f97316 52%, #c2410c 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(249, 115, 22, 0.2);
 }
 
 body.site-theme-light .credit-names .credit-pastel-gradient-name {
