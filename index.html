@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오송고 과학실</title>
+  <meta name="description" content="오송고 과학실 시약과 실험실 기구 분류표">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="과학실 홈">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>오송 과학실</span>
+    </a>
+
+    <nav class="site-nav" aria-label="주요 메뉴">
+      <a class="is-active" href="#">NOW</a>
+      <a href="#spaces">실험실</a>
+      <a href="#" id="nav-about-open">공지</a>
+      <a href="#prep-room" data-open-prep data-area="전체">자료실</a>
+      <a href="#" data-reservation-open>예약</a>
+    </nav>
+
+    <div class="header-actions">
+      <a href="#" id="login-btn" class="nav-auth-link">로그인</a>
+      <a href="#" id="account-btn" class="nav-account" hidden>
+        <span class="account-avatar" id="account-avatar" aria-hidden="true">?</span>
+        <span id="account-label">내 계정</span>
+      </a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="다크 모드로 전환" aria-pressed="false"></button>
+      <button class="menu-button" type="button" id="menu-button" aria-label="전체 메뉴" aria-controls="mobile-menu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </header>
+
+  <div class="mobile-menu-panel" id="mobile-menu" hidden>
+    <div class="mobile-menu-backdrop" data-mobile-menu-close></div>
+    <div class="mobile-menu-sheet" role="dialog" aria-label="전체 메뉴">
+      <header>
+        <strong>오송 과학실</strong>
+        <button type="button" class="modal-close" data-mobile-menu-close aria-label="닫기">×</button>
+      </header>
+      <nav class="mobile-menu-nav" aria-label="모바일 메뉴">
+        <a href="#" data-mobile-menu-link>NOW</a>
+        <a href="#spaces" data-mobile-menu-link>실험실</a>
+        <a href="#" data-mobile-menu-link data-mobile-about>공지</a>
+        <a href="#prep-room" data-open-prep data-area="전체" data-mobile-menu-link>자료실</a>
+        <a href="#" data-reservation-open data-mobile-menu-link>예약</a>
+      </nav>
+      <div class="mobile-menu-actions">
+        <button type="button" class="button primary" id="mobile-login-btn">로그인</button>
+        <button type="button" class="button secondary" id="mobile-account-btn" hidden>내 계정</button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <a class="hero-continue" href="#prep-room" data-open-prep data-area="시약">
+        <span class="continue-badge">추천</span>
+        <span class="continue-symbol" aria-hidden="true"></span>
+        <span class="continue-copy">
+          <strong>'시약 분류표와 실험기구'</strong>
+          <small>바로가기</small>
+        </span>
+        <span class="continue-arrow" aria-hidden="true">›</span>
+      </a>
+
+      <div class="hero-banner">
+        <div class="hero-copy">
+          <p class="eyebrow">Science Lab Now</p>
+          <h1 id="hero-title">오송고 과학실<br><span>#사이언스 랩크루</span></h1>
+          <p class="hero-text">
+            오송고 과학실에서 중요한 모든 것들
+          </p>
+
+          <div class="hero-actions">
+            <a class="button primary" href="#prep-room" data-open-prep data-area="전체">전체 보기</a>
+            <a class="button secondary" href="#prep-room" data-open-prep data-area="시약">시약 보기</a>
+          </div>
+
+          <p class="hero-note">
+            <span aria-hidden="true"></span>
+            로그인 없이 바로 열람할 수 있습니다.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="spaces" id="spaces" aria-labelledby="spaces-title">
+      <div class="section-head">
+        <p class="eyebrow">Today</p>
+        <h2 id="spaces-title">오늘의 과학실</h2>
+        <p>필요한 공간과 자료를 바로 열어보세요.</p>
+      </div>
+
+      <div class="spaces-grid">
+        <article class="space-card" style="--space-accent: #1b6b5f;" data-space-card data-area="시약" tabindex="0" role="button" aria-label="시약 분류표 열기">
+          <div class="room-model" aria-hidden="true">
+            <span class="room-floor"></span>
+            <span class="room-wall left"></span>
+            <span class="room-wall back"></span>
+            <span class="room-table"></span>
+            <span class="room-dot"></span>
+          </div>
+          <div class="space-info">
+            <span>01</span>
+            <h3>시약</h3>
+            <p>시약 분류표</p>
+          </div>
+        </article>
+
+        <article class="space-card" style="--space-accent: #2b8d92;" data-space-card data-area="화학실" tabindex="0" role="button" aria-label="화학실 분류표 열기">
+          <div class="room-model" aria-hidden="true">
+            <span class="room-floor"></span>
+            <span class="room-wall left"></span>
+            <span class="room-wall back"></span>
+            <span class="room-table"></span>
+            <span class="room-dot"></span>
+          </div>
+          <div class="space-info">
+            <span>02</span>
+            <h3>화학실</h3>
+            <p>용액 반응 기구</p>
+          </div>
+        </article>
+
+        <article class="space-card" style="--space-accent: #315a9d;" data-space-card data-area="생명실" tabindex="0" role="button" aria-label="생명실 분류표 열기">
+          <div class="room-model" aria-hidden="true">
+            <span class="room-floor"></span>
+            <span class="room-wall left"></span>
+            <span class="room-wall back"></span>
+            <span class="room-table"></span>
+            <span class="room-dot"></span>
+          </div>
+          <div class="space-info">
+            <span>03</span>
+            <h3>생명실</h3>
+            <p>현미경과 표본</p>
+          </div>
+        </article>
+
+        <article class="space-card" style="--space-accent: #e85f45;" data-space-card data-area="준비실" tabindex="0" role="button" aria-label="준비실 분류표 열기">
+          <div class="room-model" aria-hidden="true">
+            <span class="room-floor"></span>
+            <span class="room-wall left"></span>
+            <span class="room-wall back"></span>
+            <span class="room-table"></span>
+            <span class="room-dot"></span>
+          </div>
+          <div class="space-info">
+            <span>04</span>
+            <h3>준비실</h3>
+            <p>장비 대여</p>
+          </div>
+        </article>
+
+        <article class="space-card" style="--space-accent: #f0b942;" data-space-card data-area="전체" tabindex="0" role="button" aria-label="전체 분류표 열기">
+          <div class="room-model" aria-hidden="true">
+            <span class="room-floor"></span>
+            <span class="room-wall left"></span>
+            <span class="room-wall back"></span>
+            <span class="room-table"></span>
+            <span class="room-dot"></span>
+          </div>
+          <div class="space-info">
+            <span>05</span>
+            <h3>전체</h3>
+            <p>통합 검색</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="prep-room" id="prep-room" aria-labelledby="prep-title" hidden>
+      <div class="prep-shell">
+        <h2 class="sr-only" id="prep-title">과학실 물품 분류표</h2>
+        <header class="prep-topbar">
+          <a class="prep-brand" href="#prep-room" aria-label="과학실 물품 분류표">
+            <span>OS</span>
+            <strong>오송고 과학실</strong>
+          </a>
+          <nav class="prep-nav" aria-label="분류표 메뉴">
+            <a class="is-active" href="#prep-room" data-area-nav="시약">시약</a>
+            <a href="#prep-room" data-area-nav="화학실">화학실</a>
+            <a href="#prep-room" data-area-nav="생명실">생명실</a>
+            <a href="#prep-room" data-area-nav="준비실">준비실</a>
+            <a href="#prep-room" data-area-nav="전체">전체</a>
+          </nav>
+          <div class="prep-actions">
+            <button class="theme-toggle" type="button" data-theme-toggle aria-label="다크 모드로 전환" aria-pressed="false"></button>
+            <button class="prep-close" type="button" id="close-prep">← 뒤로가기</button>
+          </div>
+        </header>
+
+        <div class="prep-layout">
+          <aside class="prep-filter" aria-label="분류표 필터">
+            <div class="filter-heading">
+              <h2>필터</h2>
+              <button type="button" id="reset-filters">초기화</button>
+            </div>
+
+            <div class="filter-block">
+              <p data-category-title>분류</p>
+              <div class="category-list" id="category-list"></div>
+            </div>
+
+            <div class="filter-block" data-status-filter>
+              <p>상태</p>
+              <div class="status-list">
+                <button class="status-chip is-active" type="button" data-status="all">전체</button>
+                <button class="status-chip" type="button" data-status="toxic">유독물질</button>
+                <button class="status-chip" type="button" data-status="low">잔량 부족</button>
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <p>요약</p>
+              <div class="filter-stats">
+                <div>
+                  <span id="total-reagents">0</span>
+                  <small>선택 항목</small>
+                </div>
+                <div>
+                  <span id="toxic-reagents">0</span>
+                  <small>분류 수</small>
+                </div>
+                <div>
+                  <span id="low-reagents">0</span>
+                  <small>검색 결과</small>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div class="prep-main">
+            <section class="admin-panel" id="admin-panel" aria-labelledby="admin-title" hidden>
+              <header class="admin-panel-head">
+                <div>
+                  <p class="eyebrow">Admin</p>
+                  <h2 id="admin-title">관리자 패널</h2>
+                  <p><span id="admin-account-email">관리자</span> 계정 전용으로 표시됩니다.</p>
+                </div>
+                <span class="admin-badge">관리자 전용</span>
+              </header>
+
+              <div class="admin-grid">
+                <article class="admin-card">
+                  <header>
+                    <h3>분류표 현황</h3>
+                    <span>현재 데이터</span>
+                  </header>
+                  <div class="admin-metrics" aria-label="분류표 요약">
+                    <div class="admin-metric">
+                      <span id="admin-total-count">0</span>
+                      <small>전체 물품</small>
+                    </div>
+                    <div class="admin-metric">
+                      <span id="admin-reagent-count">0</span>
+                      <small>시약</small>
+                    </div>
+                    <div class="admin-metric">
+                      <span id="admin-equipment-count">0</span>
+                      <small>기구</small>
+                    </div>
+                    <div class="admin-metric">
+                      <span id="admin-alert-count">0</span>
+                      <small>점검 항목</small>
+                    </div>
+                  </div>
+                  <div class="admin-shortcuts" aria-label="관리자 빠른 이동">
+                    <button type="button" data-admin-area="전체">전체</button>
+                    <button type="button" data-admin-area="시약">시약</button>
+                    <button type="button" data-admin-area="준비실">준비실</button>
+                  </div>
+                </article>
+
+                <article class="admin-card">
+                  <header>
+                    <h3>내 계정</h3>
+                    <span>Supabase</span>
+                  </header>
+                  <div class="account-list">
+                    <div class="account-row admin-account-row">
+                      <div class="account-user">
+                        <span class="account-avatar" id="admin-account-avatar" aria-hidden="true">?</span>
+                        <span>
+                          <strong id="admin-email">로그인 필요</strong>
+                          <small id="admin-role-text">관리자</small>
+                        </span>
+                      </div>
+                      <span class="admin-role-chip">Admin</span>
+                      <button type="button" data-logout>로그아웃</button>
+                    </div>
+                  </div>
+                  <p class="admin-help">관리자 패널은 등록된 관리자 이메일로 로그인한 경우에만 표시됩니다.</p>
+                </article>
+              </div>
+            </section>
+
+            <div class="search-box">
+              <span class="search-icon" aria-hidden="true"></span>
+              <label class="sr-only" for="reagent-search">물품 검색</label>
+              <input id="reagent-search" type="search" placeholder="물품명, 위치, 분류, 화학식 검색">
+              <button type="button" id="search-button" aria-label="검색">→</button>
+            </div>
+
+            <div class="table-meta">
+              <p><strong id="visible-count">0</strong>개 항목</p>
+              <div class="sort-tabs" aria-label="정렬">
+                <span>정렬</span>
+                <button class="is-active" type="button" data-sort="id">번호</button>
+                <button type="button" data-sort="area">공간</button>
+                <button type="button" data-sort="category">분류</button>
+                <button type="button" data-sort="name">이름</button>
+                <button type="button" data-sort="location">위치</button>
+              </div>
+            </div>
+
+            <div class="reagent-table-wrap">
+              <table class="reagent-table">
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">공간</th>
+                    <th scope="col">분류</th>
+                    <th scope="col">물품명</th>
+                    <th scope="col">상세 (화학식)</th>
+                    <th scope="col">갯수/잔량</th>
+                    <th scope="col">상태</th>
+                  </tr>
+                </thead>
+                <tbody id="reagent-table-body"></tbody>
+              </table>
+              <p class="empty-state" id="empty-state" hidden>검색 결과가 없습니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 공지 & 제작진 전체 화면 (About Page) -->
+    <section class="about-page" id="about-page" hidden>
+      <div class="about-page-shell">
+        <!-- 공지사항 섹션 -->
+        <section class="about-page-section">
+          <h2>📢 공지사항</h2>
+          <div class="about-page-notice-box" id="about-page-notice-box">
+            <!-- JavaScript에서 동적으로 공지사항 목록 로드 -->
+          </div>
+          <form class="admin-notice-form" id="admin-notice-form" hidden>
+            <input type="text" id="admin-notice-input" placeholder="새 공지사항을 입력하세요..." autocomplete="off">
+            <button type="submit">등록</button>
+          </form>
+        </section>
+
+        <!-- 제작진 섹션 -->
+        <section class="about-page-section">
+          <h2>👥 디벨롭</h2>
+          <div class="credits-board">
+            <div class="credit-row credit-lead">
+              <span>주요개발</span>
+              <div class="credit-names" aria-label="주요개발">
+                <strong class="credit-gradient-name">안제용</strong>
+              </div>
+            </div>
+            <div class="credit-row">
+              <span>기능 개발 지원</span>
+              <div class="credit-names" aria-label="기능 개발 지원">
+                <strong class="credit-winged-name"><span class="credit-red-gradient-name">이진원</span></strong>
+              </div>
+            </div>
+            <div class="credit-row">
+              <span>기획</span>
+              <div class="credit-names" aria-label="제작진">
+                <strong>김형민 선생님</strong>
+              </div>
+            </div>
+            <div class="credit-row">
+              <span>팀테크</span>
+              <div class="credit-names" aria-label="도움준 사람들">
+                <strong class="credit-gradient-name">안제용</strong>
+                <strong>형태형</strong>
+                <strong>박시우</strong>
+              </div>
+            </div>
+            <div class="credit-row">
+              <span>도움준 사람들</span>
+              <div class="credit-names" aria-label="도움준 사람들">
+                <strong class="credit-blue-gradient-name">신수연</strong>
+              </div>
+            </div>
+            <div class="credit-row credit-support">
+              <span>테스터</span>
+              <div class="credit-names" aria-label="테스터">
+                <strong class="credit-blue-gradient-name">신수연</strong>
+                <strong class="credit-navy-gradient-name">정효림</strong>
+                <strong class="credit-navy-gradient-name">이송연</strong>
+                <strong class="credit-red-gradient-name">송준선</strong>
+                <strong class="credit-green-gradient-name">박수민</strong>
+              </div>
+            </div>
+            <div class="credit-row">
+              <span>사이언스 랩크루</span>
+              <div class="credit-names" aria-label="사이언스 랩크루">
+                <strong>-</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" role="status" aria-live="polite"></div>
+
+  <div class="modal-overlay item-detail-modal" id="item-detail-modal" hidden>
+    <section class="item-inspector item-detail-window" id="item-inspector" role="dialog" aria-modal="true" aria-labelledby="inspector-name" aria-describedby="inspector-detail-text">
+      <header class="modal-header item-detail-header">
+        <div>
+          <p class="modal-kicker" id="inspector-area">보관 위치</p>
+          <h2 id="inspector-name">물품명</h2>
+        </div>
+        <button type="button" class="modal-close" data-item-detail-close aria-label="닫기">×</button>
+      </header>
+
+      <div class="item-detail-body">
+        <div class="inspector-copy">
+          <dl class="inspector-details">
+            <div>
+              <dt>분류</dt>
+              <dd id="inspector-category">-</dd>
+            </div>
+            <div>
+              <dt>위치</dt>
+              <dd id="inspector-location">-</dd>
+            </div>
+            <div>
+              <dt>수량</dt>
+              <dd id="inspector-quantity">-</dd>
+            </div>
+            <div>
+              <dt>상태</dt>
+              <dd id="inspector-status">-</dd>
+            </div>
+          </dl>
+
+          <p class="inspector-detail-text" id="inspector-detail-text">-</p>
+          <p class="inspector-source" id="inspector-source">-</p>
+        </div>
+
+        <div class="inspector-visual">
+          <div class="cabinet-scene" id="cabinet-scene" aria-label="3D 보관 위치"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-overlay" id="login-modal" hidden>
+    <div class="modal-content auth-modal-content" role="dialog" aria-labelledby="modal-title">
+      <header class="modal-header">
+        <div>
+          <p class="modal-kicker">Science Lab Account</p>
+          <h2 id="modal-title">로그인</h2>
+          <p class="modal-subtitle" id="auth-modal-subtitle">계정으로 분류표 상태를 이어서 확인합니다.</p>
+        </div>
+        <button type="button" class="modal-close" id="close-login-modal" aria-label="닫기">×</button>
+      </header>
+
+      <div class="auth-tabs" aria-label="계정 탭">
+        <button type="button" class="auth-tab is-active" data-tab="login">로그인</button>
+        <button type="button" class="auth-tab" data-tab="signup">회원가입</button>
+      </div>
+
+      <form id="login-form" class="modal-form">
+        <div class="form-group">
+          <label for="login-email">이메일</label>
+          <input type="email" id="login-email" name="email" required placeholder="example@email.com">
+        </div>
+        <div class="form-group">
+          <label for="login-password">비밀번호</label>
+          <input type="password" id="login-password" name="password" required placeholder="비밀번호를 입력하세요 (6자 이상)">
+        </div>
+        <p class="error-msg" id="login-error-msg"></p>
+        <p class="auth-helper" id="auth-helper">이메일 인증 없이 비밀번호로 접속합니다.</p>
+        <div class="modal-actions">
+          <button type="submit" class="button primary" id="auth-submit-btn">로그인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="account-modal" hidden>
+    <div class="modal-content account-modal-content" role="dialog" aria-labelledby="account-modal-title">
+      <header class="modal-header">
+        <div>
+          <p class="modal-kicker">My Account</p>
+          <h2 id="account-modal-title">내 계정</h2>
+          <p class="modal-subtitle">현재 로그인된 계정입니다.</p>
+        </div>
+        <button type="button" class="modal-close" id="close-account-modal" aria-label="닫기">×</button>
+      </header>
+
+      <div class="account-summary">
+        <span class="account-avatar account-avatar-large" id="account-modal-avatar" aria-hidden="true">?</span>
+        <div>
+          <strong id="account-email">로그인 필요</strong>
+          <small id="account-role">일반 계정</small>
+        </div>
+      </div>
+
+      <div class="account-detail-grid">
+        <div>
+          <span>상태</span>
+          <strong id="account-state">로그인됨</strong>
+        </div>
+        <div>
+          <span>권한</span>
+          <strong id="account-permission">일반</strong>
+        </div>
+      </div>
+
+      <div class="modal-actions modal-actions-split">
+        <button type="button" class="button secondary" id="account-admin-open" hidden>관리자 패널</button>
+        <button type="button" class="button primary" id="logout-btn" data-logout>로그아웃</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="reservation-modal" hidden>
+    <div class="modal-content reservation-modal-content" role="dialog" aria-labelledby="reservation-modal-title">
+      <header class="modal-header">
+        <div>
+          <p class="modal-kicker">Science Lab Reservation</p>
+          <h2 id="reservation-modal-title">과학실 예약 및 안내</h2>
+          <p class="modal-subtitle">안내 사항을 확인하고 공간 예약을 진행해 주세요.</p>
+        </div>
+        <button type="button" class="modal-close" data-reservation-close aria-label="닫기">×</button>
+      </header>
+
+      <!-- 모바일 전환용 탭 버튼 (모바일 화면에서 노출) -->
+      <div class="reservation-tabs" id="reservation-tabs" aria-label="예약 모달 탭">
+        <button type="button" class="reservation-tab is-active" data-res-tab="notices">예약 현황</button>
+        <button type="button" class="reservation-tab" data-res-tab="form">예약 신청</button>
+      </div>
+
+      <div class="reservation-modal-body">
+        <!-- 예약 현황 패널 (좌측 열) -->
+        <aside class="reservation-notice-section" id="reservation-notice-section">
+          <div class="reservation-status-board" id="reservation-status-board" aria-live="polite">
+            <!-- JavaScript에서 렌더링 -->
+          </div>
+          <div class="reservation-admin-panel" id="reservation-admin-panel" hidden>
+            <header>
+              <h3>접수된 예약 요청</h3>
+              <button type="button" class="reservation-clear" id="reservation-clear-btn">전체 삭제</button>
+            </header>
+            <div class="reservation-list" id="reservation-list">
+              <!-- JavaScript에서 렌더링 -->
+            </div>
+          </div>
+        </aside>
+
+        <!-- 예약 신청 폼 (우측 열) -->
+        <form id="reservation-form" class="modal-form reservation-form">
+          <div class="reservation-grid">
+            <div class="form-group">
+              <label for="reservation-room">공간</label>
+              <select id="reservation-room" name="room" required>
+                <option value="화학실">화학실</option>
+                <option value="생명실">생명실</option>
+                <option value="준비실">준비실</option>
+                <option value="전체 과학실">전체 과학실</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-date">날짜</label>
+              <input type="date" id="reservation-date" name="date" required>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-time">시간</label>
+              <select id="reservation-time" name="time" required>
+                <option value="1교시">1교시</option>
+                <option value="2교시">2교시</option>
+                <option value="3교시">3교시</option>
+                <option value="4교시">4교시</option>
+                <option value="5교시">5교시</option>
+                <option value="6교시">6교시</option>
+                <option value="7교시">7교시</option>
+                <option value="방과후">방과후</option>
+                <option value="야자 1">야자 1</option>
+                <option value="야자 2">야자 2</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-class">학급/동아리</label>
+              <input type="text" id="reservation-class" name="className" placeholder="예: 2학년 3반">
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-student-id">신청자 학번</label>
+              <input type="text" id="reservation-student-id" name="applicantStudentId" placeholder="예: 20315">
+            </div>
+
+            <div class="form-group">
+              <label for="reservation-applicant-name">신청자 이름</label>
+              <input type="text" id="reservation-applicant-name" name="applicantName" placeholder="예: 홍길동">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="reservation-purpose">사용 목적</label>
+            <textarea id="reservation-purpose" name="purpose" rows="4" placeholder="실험명이나 필요한 준비물을 적어주세요."></textarea>
+          </div>
+
+          <div class="modal-actions modal-actions-split">
+            <button type="button" class="button secondary" data-reservation-close>닫기</button>
+            <button type="submit" class="button primary">예약 요청</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="auth.js"></script>
+  <script src="data/reagents.js"></script>
+  <script src="data/lab-items.js"></script>
+  <script src="vendor/three.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
