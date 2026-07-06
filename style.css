@@ -4856,6 +4856,14 @@ body.is-admin .notice-delete-btn {
   text-shadow: 0 0 14px rgba(247, 221, 230, 0.2);
 }
 
+.credit-names .credit-neon-gradient-name {
+  color: transparent;
+  background: linear-gradient(90deg, #003f3f 0%, #008b8b 50%, #7fffd4 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 16px rgba(0, 139, 139, 0.34);
+}
+
 .credit-winged-name {
   display: inline-flex;
   align-items: center;
@@ -4947,6 +4955,108 @@ body.site-theme-light .credit-names .credit-pastel-gradient-name {
   flex-wrap: wrap;
 }
 
+.credit-lab-crew {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.credit-crew-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.credit-crew-group span {
+  color: #c9c9cf;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.credit-crew-group > span,
+.credit-crew-group strong {
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.credit-team-manager > span,
+.credit-team-manager strong {
+  color: transparent;
+  background-image: linear-gradient(90deg, #ffd1e8 0%, #d65f9a 48%, #8e315f 100%);
+  text-shadow: 0 0 16px rgba(214, 95, 154, 0.24);
+}
+
+.credit-team-master > span,
+.credit-team-master strong {
+  color: transparent;
+  background-image: linear-gradient(90deg, #ffe8a3 0%, #d7a92f 48%, #8f6b13 100%);
+  text-shadow: 0 0 16px rgba(215, 169, 47, 0.24);
+}
+
+.credit-team-creator > span,
+.credit-team-creator strong {
+  color: transparent;
+  background-image: linear-gradient(90deg, #bfdbfe 0%, #3b82c4 48%, #1d4f83 100%);
+  text-shadow: 0 0 16px rgba(59, 130, 196, 0.26);
+}
+
+.credit-team-tech > span,
+.credit-team-tech strong {
+  color: transparent;
+  background-image: linear-gradient(90deg, #ead7ff 0%, #9d70d6 48%, #5b347f 100%);
+  text-shadow: 0 0 16px rgba(157, 112, 214, 0.24);
+}
+
+.credit-name-line {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+}
+
+.credit-name-line strong {
+  text-align: center;
+}
+
+.credit-leader-line {
+  grid-template-columns: max-content;
+  min-height: 24px;
+}
+
+.credit-leader-line strong {
+  font-size: 1rem;
+  font-weight: 900;
+  filter: brightness(1.18) saturate(1.16);
+}
+
+.credit-team-manager .credit-leader-line strong {
+  text-shadow:
+    0 0 8px rgba(255, 209, 232, 0.28),
+    0 0 18px rgba(214, 95, 154, 0.38);
+}
+
+.credit-team-master .credit-leader-line strong {
+  text-shadow:
+    0 0 8px rgba(255, 232, 163, 0.28),
+    0 0 18px rgba(215, 169, 47, 0.38);
+}
+
+.credit-team-creator .credit-leader-line strong {
+  text-shadow:
+    0 0 8px rgba(191, 219, 254, 0.3),
+    0 0 18px rgba(59, 130, 196, 0.4);
+}
+
+.credit-team-tech .credit-leader-line strong {
+  text-shadow:
+    0 0 8px rgba(234, 215, 255, 0.3),
+    0 0 18px rgba(157, 112, 214, 0.4);
+}
+
 @media (max-width: 768px) {
   .about-page {
     padding: 24px 16px;
@@ -4960,5 +5070,15 @@ body.site-theme-light .credit-names .credit-pastel-gradient-name {
 
   .credit-names {
     gap: 10px 14px;
+  }
+
+  .credit-lab-crew {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .credit-lab-crew {
+    grid-template-columns: 1fr;
   }
 }
