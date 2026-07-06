@@ -4790,6 +4790,14 @@ body.is-admin .notice-delete-btn {
   text-shadow: 0 0 16px rgba(34, 197, 94, 0.26);
 }
 
+.credit-names .credit-pastel-gradient-name {
+  color: transparent;
+  background: linear-gradient(135deg, #f7dde6 0%, #f5e9de 45%, #d7f1a5 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 14px rgba(247, 221, 230, 0.2);
+}
+
 .credit-winged-name {
   display: inline-flex;
   align-items: center;
@@ -4817,7 +4825,9 @@ body.site-theme-dark .credit-names .credit-navy-gradient-name,
 body.site-theme-light .credit-names .credit-red-gradient-name,
 body.site-theme-dark .credit-names .credit-red-gradient-name,
 body.site-theme-light .credit-names .credit-green-gradient-name,
-body.site-theme-dark .credit-names .credit-green-gradient-name {
+body.site-theme-dark .credit-names .credit-green-gradient-name,
+body.site-theme-light .credit-names .credit-pastel-gradient-name,
+body.site-theme-dark .credit-names .credit-pastel-gradient-name {
   color: transparent;
 }
 
@@ -4861,6 +4871,13 @@ body.site-theme-light .credit-names .credit-green-gradient-name {
   background-clip: text;
   -webkit-background-clip: text;
   text-shadow: 0 0 10px rgba(22, 163, 74, 0.18);
+}
+
+body.site-theme-light .credit-names .credit-pastel-gradient-name {
+  background: linear-gradient(135deg, #d85f86 0%, #c28a63 45%, #69a725 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: 0 0 10px rgba(216, 95, 134, 0.16);
 }
 
 .credit-names {
