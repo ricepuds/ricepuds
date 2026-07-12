@@ -10,7 +10,8 @@ const reservationCloseButtons = document.querySelectorAll("[data-reservation-clo
 const reservationForm = document.querySelector("#reservation-form");
 const reservationRoomInput = document.querySelector("#reservation-room");
 const reservationDateInput = document.querySelector("#reservation-date");
-const reservationTimeInput = document.querySelector("#reservation-time");
+const reservationStartTimeInput = document.querySelector("#reservation-start-time");
+const reservationEndTimeInput = document.querySelector("#reservation-end-time");
 const reservationStatusBoard = document.querySelector("#reservation-status-board");
 const reservationAdminPanel = document.querySelector("#reservation-admin-panel");
 const reservationList = document.querySelector("#reservation-list");
@@ -2054,9 +2055,18 @@ if (reservationDateInput) {
   reservationDateInput.min = getLocalDateValue();
 }
 
-[reservationRoomInput, reservationDateInput, reservationTimeInput].forEach((input) => {
+[reservationRoomInput, reservationDateInput, reservationStartTimeInput, reservationEndTimeInput].forEach((input) => {
   input?.addEventListener("change", renderReservationSchedule);
   input?.addEventListener("input", renderReservationSchedule);
+});
+
+reservationStartTimeInput?.addEventListener("change", () => {
+  const startIndex = RESERVATION_TIME_SLOTS.indexOf(reservationStartTimeInput.value);
+  const endIndex = RESERVATION_TIME_SLOTS.indexOf(reservationEndTimeInput?.value || "");
+
+  if (reservationEndTimeInput && endIndex < startIndex) {
+    reservationEndTimeInput.value = reservationStartTimeInput.value;
+  }
 });
 
 soonLinks.forEach((link) => {
@@ -2134,6 +2144,16 @@ itemDetailModal?.addEventListener("click", (event) => {
 reservationForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(reservationForm);
+  const startTime = String(formData.get("startTime") || "");
+  const endTime = String(formData.get("endTime") || "");
+  const startTimeIndex = RESERVATION_TIME_SLOTS.indexOf(startTime);
+  const endTimeIndex = RESERVATION_TIME_SLOTS.indexOf(endTime);
+
+  if (startTimeIndex < 0 || endTimeIndex < 0 || startTimeIndex > endTimeIndex) {
+    showToast("종료 교시는 시작 교시보다 같거나 늦어야 합니다.");
+    return;
+  }
+
   const createdAt = new Date().toLocaleString("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -2143,7 +2163,7 @@ reservationForm?.addEventListener("submit", async (event) => {
     id: `${Date.now()}`,
     room: String(formData.get("room") || ""),
     date: String(formData.get("date") || ""),
-    time: String(formData.get("time") || ""),
+    time: startTime === endTime ? startTime : `${startTime} ~ ${endTime}`,
     className: String(formData.get("className") || ""),
     applicantStudentId: String(formData.get("applicantStudentId") || ""),
     applicantName: String(formData.get("applicantName") || ""),
