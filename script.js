@@ -2152,12 +2152,6 @@ reservationForm?.addEventListener("submit", async (event) => {
     status: "pending",
   };
 
-  if (getReservationForSlot(reservation.room, reservation.date, reservation.time)) {
-    showToast("이미 예약된 시간입니다. 다른 시간을 선택해 주세요.");
-    renderReservationSchedule();
-    return;
-  }
-
   const saved = await addReservation(reservation);
 
   if (!saved) {
