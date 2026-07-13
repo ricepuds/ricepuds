@@ -2186,6 +2186,14 @@ reservationForm?.addEventListener("submit", async (event) => {
 });
 
 reservationClearButton?.addEventListener("click", async () => {
+  const shouldClear = window.confirm(
+    "모든 예약 요청을 삭제하시겠습니까?\n삭제한 예약은 다시 복구할 수 없습니다."
+  );
+
+  if (!shouldClear) {
+    return;
+  }
+
   const cleared = await clearReservations();
 
   if (!cleared) {
