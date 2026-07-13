@@ -4589,8 +4589,10 @@ body.is-admin .notice-delete-btn {
   background: #ffffff;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 0 1 400px;
+  height: min(400px, calc(100dvh - 250px));
   min-height: 0;
+  overflow: hidden;
 }
 
 .reservation-notice-section .reservation-admin-panel[hidden] {
@@ -4612,6 +4614,7 @@ body.is-admin .notice-delete-btn {
 
 .reservation-notice-section .reservation-list {
   flex: 1 1 auto;
+  min-height: 0;
   max-height: none;
   overflow-y: auto;
   padding-right: 4px;
@@ -4684,6 +4687,11 @@ body.is-admin .notice-delete-btn {
     max-height: none;
     min-height: 0;
     padding: 20px;
+    overflow: visible;
+  }
+
+  .reservation-notice-section .reservation-admin-panel {
+    height: auto;
     overflow: visible;
   }
 
