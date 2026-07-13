@@ -3616,6 +3616,8 @@ body.site-theme-dark .reservation-modal-content .modal-actions .button.secondary
 
 .reservation-list {
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
   max-height: none;
   overflow: auto;
