@@ -3529,8 +3529,12 @@ body.prep-theme-light .form-group input {
 
 .reservation-form {
   max-height: calc(100dvh - 170px);
-  padding: 20px 24px 18px;
+  padding: 16px 24px 12px;
   overflow: auto;
+}
+
+.reservation-applicant-name-field {
+  grid-column: 1 / -1;
 }
 
 .reservation-form .form-group {
@@ -3550,7 +3554,20 @@ body.prep-theme-light .form-group input {
 }
 
 .reservation-form .form-group textarea {
-  min-height: 88px;
+  height: 76px;
+  min-height: 68px;
+}
+
+body.site-theme-dark .reservation-modal-content .modal-actions .button.primary {
+  color: #ffffff;
+  border-color: #101820;
+  background: #101820;
+}
+
+body.site-theme-dark .reservation-modal-content .modal-actions .button.secondary {
+  color: #101820;
+  border-color: #cbd7e1;
+  background: #ffffff;
 }
 
 .reservation-admin-panel {
