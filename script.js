@@ -1,15 +1,39 @@
 // ============================================
 // Google Sheets live inventory sync
 // ============================================
-const SPREADSHEET_ID = "1nO8D8ZLlhcTiotgSYqHhy2-I9ikcmm_DXFy0YTlUZv8";
+const EQUIPMENT_SPREADSHEET_ID = "1nO8D8ZLlhcTiotgSYqHhy2-I9ikcmm_DXFy0YTlUZv8";
+const REAGENT_SPREADSHEET_ID = "1RJDiRchlnAsGyUFCPn7PdFIuUBFMLvOQ";
 const SHEET_NAMES = {
-  reagents: "시약 목록",
+  reagents: "시약 조사표",
   labItems: "기구 목록",
+};
+const SHEET_SOURCES = {
+  [SHEET_NAMES.reagents]: {
+    spreadsheetId: REAGENT_SPREADSHEET_ID,
+    gid: "1516027442",
+    range: "A4:T",
+  },
+  [SHEET_NAMES.labItems]: {
+    spreadsheetId: EQUIPMENT_SPREADSHEET_ID,
+    sheet: SHEET_NAMES.labItems,
+  },
 };
 const SHEET_SYNC_INTERVAL_MS = 30_000;
 const SHEET_FETCH_TIMEOUT_MS = 15_000;
 const SHEET_REQUIRED_HEADERS = {
-  [SHEET_NAMES.reagents]: ["번호", "한글명"],
+  [SHEET_NAMES.reagents]: [
+    "번호",
+    "화학식",
+    "한글명",
+    "영문명",
+    "수량",
+    "단위",
+    "상태",
+    "잔량",
+    "위험 분류",
+    "분류(보관그룹)",
+    "보관 위치",
+  ],
   [SHEET_NAMES.labItems]: ["아이디", "공간", "분류", "물품명", "갯수/잔량", "위치"],
 };
 const LOW_STOCK_REMAINING_VALUES = new Set(["거의없음", "소량(25%미만)"]);
@@ -24,13 +48,31 @@ const googleSheetDataSignatures = {
 };
 
 async function fetchSheetData(sheetName) {
+  const source = SHEET_SOURCES[sheetName];
+
+  if (!source) {
+    throw new Error(`Google Sheets 데이터 원본을 찾을 수 없습니다: ${sheetName}`);
+  }
+
   const query = new URLSearchParams({
     tqx: "out:json",
     headers: "1",
-    sheet: sheetName,
     _: String(Date.now()),
   });
-  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?${query.toString()}`;
+
+  if (source.gid) {
+    query.set("gid", source.gid);
+  }
+
+  if (source.sheet) {
+    query.set("sheet", source.sheet);
+  }
+
+  if (source.range) {
+    query.set("range", source.range);
+  }
+
+  const url = `https://docs.google.com/spreadsheets/d/${source.spreadsheetId}/gviz/tq?${query.toString()}`;
   const abortController = new AbortController();
   const timeoutId = window.setTimeout(() => abortController.abort(), SHEET_FETCH_TIMEOUT_MS);
 
@@ -104,11 +146,13 @@ function mapReagentRows(rawRows) {
     .map((row, index) => {
       const nameKr = normalizeText(row["한글명"]);
       const nameEn = normalizeText(row["영문명"]);
+      const aliases = normalizeText(row["이명/다른표기"]);
       const acidBase = normalizeText(row["조사구분"]);
       const hazard = normalizeText(row["위험 분류"]);
-      const storageGroup = normalizeText(row["분류(보관 그룹)"]);
+      const storageGroup = normalizeText(row["분류(보관그룹)"] ?? row["분류(보관 그룹)"]);
       const remaining = normalizeText(row["잔량"]);
       const quantity = row["수량"] ?? "";
+      const searchKey = normalizeText(row["검색키"]);
       const reagent = {
         id: row["번호"] ?? "",
         acidBase,
@@ -117,26 +161,30 @@ function mapReagentRows(rawRows) {
         nameEn,
         name: nameKr || nameEn,
         iupac: nameEn,
-        commonName: nameKr,
+        commonName: aliases || nameKr,
         category: storageGroup || hazard || acidBase,
         condition: normalizeText(row["상태"]),
         remaining,
         remainingAmount: quantity,
         hazard,
         storageGroup,
+        aliases,
+        searchKey,
         location: normalizeText(row["보관 위치"]),
         lowStockMode: "bucket",
         sourceSheet: SHEET_NAMES.reagents,
-        sourceCell: `A${index + 2}`,
+        sourceCell: `A${index + 5}:T${index + 5}`,
         details: {
           quantity,
           unit: normalizeText(row["단위"]),
           isOpened: normalizeText(row["개봉여부"]),
-          openDate: normalizeText(row["개봉일지"]),
+          openDate: normalizeText(row["개봉일자"] ?? row["개봉일지"]),
           expiryDate: normalizeText(row["유통기한"]),
           needsDisposal: normalizeText(row["폐기 필요"]),
           inspector: normalizeText(row["조사자"]),
           note: normalizeText(row["비고"]),
+          aliases,
+          searchKey,
         },
       };
 
@@ -144,7 +192,7 @@ function mapReagentRows(rawRows) {
       reagent.lowStock = isReagentLowStock(remaining);
       return reagent;
     })
-    .filter((reagent) => normalizeText(reagent.id) || reagent.name);
+    .filter((reagent) => Boolean(reagent.name));
 }
 
 function mapLabItemRows(rawRows) {
@@ -548,6 +596,8 @@ function getInventorySearchText(item) {
     item.name,
     item.detail,
     item.formula,
+    item.aliases,
+    item.sheetSearchKey,
     item.quantity,
     item.location,
     item.sourceSheet,
@@ -570,7 +620,8 @@ function normalizeInventoryItem(item) {
 }
 
 function isGoogleSheetManagedItem(item) {
-  return item.type === "equipment" && item.sourceSheet === SHEET_NAMES.labItems;
+  return item.sourceSheet === SHEET_NAMES.reagents ||
+    item.sourceSheet === SHEET_NAMES.labItems;
 }
 
 function applyInventoryEdits() {
@@ -612,7 +663,8 @@ async function updateInventoryItemField(itemId, field, value) {
   }
 
   if (isGoogleSheetManagedItem(item)) {
-    showToast("기구 정보는 연결된 Google Sheet에서 수정해주세요.");
+    const itemTypeLabel = item.type === "reagent" ? "시약" : "기구";
+    showToast(`${itemTypeLabel} 정보는 연결된 Google Sheet에서 수정해주세요.`);
     return;
   }
 
@@ -1080,6 +1132,8 @@ function buildInventoryItems() {
       name: reagent.name || "이름 없음",
       detail,
       formula,
+      aliases: reagent.aliases,
+      sheetSearchKey: reagent.searchKey,
       quantity: remainingText || formatNumber(reagent.remainingAmount),
       location: reagent.location || "시약장",
       toxic: Boolean(reagent.toxic),
