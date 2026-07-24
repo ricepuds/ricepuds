@@ -1,3 +1,361 @@
+// ============================================
+// Google Sheets live inventory sync
+// ============================================
+const SPREADSHEET_ID = "1nO8D8ZLlhcTiotgSYqHhy2-I9ikcmm_DXFy0YTlUZv8";
+const SHEET_NAMES = {
+  reagents: "시약 목록",
+  labItems: "기구 목록",
+};
+const SHEET_SYNC_INTERVAL_MS = 30_000;
+const SHEET_FETCH_TIMEOUT_MS = 15_000;
+const SHEET_REQUIRED_HEADERS = {
+  [SHEET_NAMES.reagents]: ["번호", "한글명"],
+  [SHEET_NAMES.labItems]: ["아이디", "공간", "분류", "물품명", "갯수/잔량", "위치"],
+};
+const LOW_STOCK_REMAINING_VALUES = new Set(["거의없음", "소량(25%미만)"]);
+let googleSheetSyncPromise = null;
+let googleSheetRefreshPending = false;
+let googleSheetRenderPending = false;
+let pendingGoogleSheetSnapshot = null;
+let lastGoogleSheetSyncErrorKey = "";
+const googleSheetDataSignatures = {
+  reagents: null,
+  labItems: null,
+};
+
+async function fetchSheetData(sheetName) {
+  const query = new URLSearchParams({
+    tqx: "out:json",
+    headers: "1",
+    sheet: sheetName,
+    _: String(Date.now()),
+  });
+  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?${query.toString()}`;
+  const abortController = new AbortController();
+  const timeoutId = window.setTimeout(() => abortController.abort(), SHEET_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const text = await response.text();
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+
+    if (jsonStart < 0 || jsonEnd <= jsonStart) {
+      throw new Error("Google Sheets 응답 형식을 확인할 수 없습니다.");
+    }
+
+    const parsed = JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+
+    if (!parsed.table || !Array.isArray(parsed.table.cols)) {
+      throw new Error(parsed.errors?.[0]?.detailed_message || "Google Sheets 표 데이터를 찾을 수 없습니다.");
+    }
+
+    const headers = parsed.table.cols.map((column) => normalizeText(column?.label));
+    const missingHeaders = (SHEET_REQUIRED_HEADERS[sheetName] || [])
+      .filter((header) => !headers.includes(header));
+
+    if (missingHeaders.length > 0) {
+      throw new Error(`필수 열이 없습니다: ${missingHeaders.join(", ")}`);
+    }
+
+    return (Array.isArray(parsed.table.rows) ? parsed.table.rows : []).map((row) => {
+      const item = {};
+      const cells = Array.isArray(row.c) ? row.c : [];
+
+      cells.forEach((cell, index) => {
+        if (headers[index]) {
+          item[headers[index]] = cell?.v ?? "";
+        }
+      });
+
+      return item;
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`${SHEET_FETCH_TIMEOUT_MS / 1000}초 안에 응답이 오지 않았습니다.`);
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function isReagentLowStock(remainingBucket) {
+  return LOW_STOCK_REMAINING_VALUES.has(normalizeText(remainingBucket));
+}
+
+function isReagentToxic(reagent) {
+  const storageGroup = normalizeText(reagent.storageGroup);
+  const hazard = normalizeText(reagent.hazard);
+  return storageGroup === "독성물질" || hazard.includes("독성");
+}
+
+function mapReagentRows(rawRows) {
+  return rawRows
+    .map((row, index) => {
+      const nameKr = normalizeText(row["한글명"]);
+      const nameEn = normalizeText(row["영문명"]);
+      const acidBase = normalizeText(row["조사구분"]);
+      const hazard = normalizeText(row["위험 분류"]);
+      const storageGroup = normalizeText(row["분류(보관 그룹)"]);
+      const remaining = normalizeText(row["잔량"]);
+      const quantity = row["수량"] ?? "";
+      const reagent = {
+        id: row["번호"] ?? "",
+        acidBase,
+        formula: normalizeText(row["화학식"]),
+        nameKr,
+        nameEn,
+        name: nameKr || nameEn,
+        iupac: nameEn,
+        commonName: nameKr,
+        category: storageGroup || hazard || acidBase,
+        condition: normalizeText(row["상태"]),
+        remaining,
+        remainingAmount: quantity,
+        hazard,
+        storageGroup,
+        location: normalizeText(row["보관 위치"]),
+        lowStockMode: "bucket",
+        sourceSheet: SHEET_NAMES.reagents,
+        sourceCell: `A${index + 2}`,
+        details: {
+          quantity,
+          unit: normalizeText(row["단위"]),
+          isOpened: normalizeText(row["개봉여부"]),
+          openDate: normalizeText(row["개봉일지"]),
+          expiryDate: normalizeText(row["유통기한"]),
+          needsDisposal: normalizeText(row["폐기 필요"]),
+          inspector: normalizeText(row["조사자"]),
+          note: normalizeText(row["비고"]),
+        },
+      };
+
+      reagent.toxic = isReagentToxic(reagent);
+      reagent.lowStock = isReagentLowStock(remaining);
+      return reagent;
+    })
+    .filter((reagent) => normalizeText(reagent.id) || reagent.name);
+}
+
+function mapLabItemRows(rawRows) {
+  const seenIds = new Set();
+
+  return rawRows
+    .map((row, index) => {
+      const sourceRow = index + 2;
+      const item = {
+        id: normalizeText(row["아이디"]),
+        area: normalizeText(row["공간"]),
+        category: normalizeText(row["분류"]),
+        name: normalizeText(row["물품명"]),
+        quantity: normalizeText(row["갯수/잔량"]),
+        location: normalizeText(row["위치"]),
+        sourceSheet: SHEET_NAMES.labItems,
+        sourceCell: `A${sourceRow}:F${sourceRow}`,
+      };
+      const hasAnyValue = [
+        item.id,
+        item.area,
+        item.category,
+        item.name,
+        item.quantity,
+        item.location,
+      ].some(Boolean);
+
+      if (!hasAnyValue) {
+        return null;
+      }
+
+      if (!item.id) {
+        throw new Error(`기구 목록 ${sourceRow}행의 아이디가 비어 있습니다.`);
+      }
+
+      if (seenIds.has(item.id)) {
+        throw new Error(`기구 목록에 중복 아이디가 있습니다: ${item.id}`);
+      }
+
+      seenIds.add(item.id);
+      return item;
+    })
+    .filter(Boolean);
+}
+
+function isInventoryEditorActive() {
+  const activeElement = document.activeElement;
+  return activeElement instanceof Element && Boolean(activeElement.closest("[data-edit-field]"));
+}
+
+function mergeGoogleSheetSnapshots(currentSnapshot, nextSnapshot) {
+  return {
+    ...(currentSnapshot || {}),
+    ...nextSnapshot,
+  };
+}
+
+function applyGoogleSheetSnapshot(snapshot) {
+  if (isInventoryEditorActive()) {
+    pendingGoogleSheetSnapshot = mergeGoogleSheetSnapshots(pendingGoogleSheetSnapshot, snapshot);
+    googleSheetRenderPending = true;
+    return;
+  }
+
+  if (Object.hasOwn(snapshot, "reagents")) {
+    window.REAGENTS = snapshot.reagents;
+    baseReagents = snapshot.reagents;
+    googleSheetDataSignatures.reagents = snapshot.reagentsSignature;
+  }
+
+  if (Object.hasOwn(snapshot, "labItems")) {
+    window.LAB_ITEMS = snapshot.labItems;
+    labItems = snapshot.labItems;
+    googleSheetDataSignatures.labItems = snapshot.labItemsSignature;
+  }
+
+  buildInventoryItems();
+  pendingGoogleSheetSnapshot = null;
+  googleSheetRenderPending = false;
+  renderDashboard();
+}
+
+async function initGoogleSheetsData({ announce = false } = {}) {
+  const [reagentResult, labItemResult] = await Promise.allSettled([
+    fetchSheetData(SHEET_NAMES.reagents),
+    fetchSheetData(SHEET_NAMES.labItems),
+  ]);
+  const failedSheets = [];
+  const nextSnapshot = {};
+  let hasUpdatedData = false;
+
+  if (reagentResult.status === "fulfilled") {
+    try {
+      const nextReagents = mapReagentRows(reagentResult.value);
+      const nextSignature = JSON.stringify(nextReagents);
+      const currentSignature = pendingGoogleSheetSnapshot?.reagentsSignature ??
+        googleSheetDataSignatures.reagents;
+
+      if (nextSignature !== currentSignature) {
+        nextSnapshot.reagents = nextReagents;
+        nextSnapshot.reagentsSignature = nextSignature;
+        hasUpdatedData = true;
+      }
+    } catch (error) {
+      failedSheets.push({ name: SHEET_NAMES.reagents, error });
+    }
+  } else {
+    failedSheets.push({ name: SHEET_NAMES.reagents, error: reagentResult.reason });
+  }
+
+  if (labItemResult.status === "fulfilled") {
+    try {
+      const nextLabItems = mapLabItemRows(labItemResult.value);
+      const nextSignature = JSON.stringify(nextLabItems);
+      const currentSignature = pendingGoogleSheetSnapshot?.labItemsSignature ??
+        googleSheetDataSignatures.labItems;
+
+      if (nextSignature !== currentSignature) {
+        nextSnapshot.labItems = nextLabItems;
+        nextSnapshot.labItemsSignature = nextSignature;
+        hasUpdatedData = true;
+      }
+    } catch (error) {
+      failedSheets.push({ name: SHEET_NAMES.labItems, error });
+    }
+  } else {
+    failedSheets.push({ name: SHEET_NAMES.labItems, error: labItemResult.reason });
+  }
+
+  if (hasUpdatedData) {
+    applyGoogleSheetSnapshot(nextSnapshot);
+  }
+
+  if (failedSheets.length > 0) {
+    const failedNames = failedSheets.map(({ name }) => name);
+    const errorKey = failedNames.join("|");
+
+    failedSheets.forEach(({ name, error }) => {
+      console.warn(`[Google Sheets] "${name}" 동기화 실패`, error);
+    });
+
+    if (announce || errorKey !== lastGoogleSheetSyncErrorKey) {
+      showToast(`"${failedNames.join(", ")}" 동기화에 실패했어요. 기존 데이터는 유지합니다.`);
+    }
+
+    lastGoogleSheetSyncErrorKey = errorKey;
+  } else if (lastGoogleSheetSyncErrorKey) {
+    lastGoogleSheetSyncErrorKey = "";
+    showToast("Google Sheets 연결이 복구되었습니다.");
+  } else if (announce) {
+    console.info("Google Sheets inventory sync is active.");
+  }
+
+  return {
+    updated: hasUpdatedData,
+    failedSheets: failedSheets.map(({ name }) => name),
+  };
+}
+
+function requestGoogleSheetsSync({ announce = false, force = false } = {}) {
+  if (isInventoryEditorActive() || (!force && document.hidden)) {
+    googleSheetRefreshPending = true;
+    return Promise.resolve(null);
+  }
+
+  if (googleSheetSyncPromise) {
+    return googleSheetSyncPromise;
+  }
+
+  googleSheetRefreshPending = false;
+  googleSheetSyncPromise = initGoogleSheetsData({ announce })
+    .catch((error) => {
+      console.error("[Google Sheets] 동기화 중 예기치 않은 오류가 발생했습니다.", error);
+
+      if (announce || !lastGoogleSheetSyncErrorKey) {
+        showToast("Google Sheets 동기화에 실패했어요. 기존 데이터는 유지합니다.");
+      }
+
+      lastGoogleSheetSyncErrorKey = "unexpected";
+      return null;
+    })
+    .finally(() => {
+      googleSheetSyncPromise = null;
+
+      if (googleSheetRefreshPending && !document.hidden && !isInventoryEditorActive()) {
+        void requestGoogleSheetsSync();
+      }
+    });
+
+  return googleSheetSyncPromise;
+}
+
+function flushPendingGoogleSheetWork() {
+  if (isInventoryEditorActive()) {
+    return;
+  }
+
+  if (pendingGoogleSheetSnapshot) {
+    const snapshot = pendingGoogleSheetSnapshot;
+    pendingGoogleSheetSnapshot = null;
+    applyGoogleSheetSnapshot(snapshot);
+  } else if (googleSheetRenderPending) {
+    googleSheetRenderPending = false;
+    renderDashboard();
+  }
+
+  if (googleSheetRefreshPending) {
+    void requestGoogleSheetsSync();
+  }
+}
+
 const soonLinks = document.querySelectorAll("[data-soon]");
 const openPrepLinks = document.querySelectorAll("[data-open-prep]");
 const reservationOpenLinks = document.querySelectorAll("[data-reservation-open]");
@@ -58,8 +416,8 @@ const inspectorDetailText = document.querySelector("#inspector-detail-text");
 const inspectorSource = document.querySelector("#inspector-source");
 const cabinetScene = document.querySelector("#cabinet-scene");
 
-const baseReagents = Array.isArray(window.REAGENTS) ? window.REAGENTS : [];
-const labItems = Array.isArray(window.LAB_ITEMS) ? window.LAB_ITEMS : [];
+let baseReagents = Array.isArray(window.REAGENTS) ? window.REAGENTS : [];
+let labItems = Array.isArray(window.LAB_ITEMS) ? window.LAB_ITEMS : [];
 const AREA_ORDER = ["시약", "화학실", "생명실", "준비실", "전체"];
 const AREA_LABELS = {
   시약: "시약",
@@ -138,7 +496,7 @@ function closeMobileMenu() {
 window.closeMobileMenu = closeMobileMenu;
 
 function normalizeText(value) {
-  return String(value || "").trim();
+  return String(value ?? "").trim();
 }
 
 function formatNumber(value) {
@@ -202,16 +560,27 @@ function normalizeInventoryItem(item) {
 
   if (item.type === "reagent") {
     const numericQuantity = Number(String(item.quantity).replaceAll(",", ""));
-    item.lowStock = Boolean(item.toxic) || (Number.isFinite(numericQuantity) && numericQuantity > 0 && numericQuantity <= 50);
+    item.lowStock = item.lowStockMode === "bucket"
+      ? isReagentLowStock(item.remainingBucket)
+      : Boolean(item.toxic) ||
+        (Number.isFinite(numericQuantity) && numericQuantity > 0 && numericQuantity <= 50);
   }
 
   return item;
+}
+
+function isGoogleSheetManagedItem(item) {
+  return item.type === "equipment" && item.sourceSheet === SHEET_NAMES.labItems;
 }
 
 function applyInventoryEdits() {
   const edits = getSavedInventoryEdits();
 
   inventoryItems = inventoryItems.map((item) => {
+    if (isGoogleSheetManagedItem(item)) {
+      return normalizeInventoryItem(item);
+    }
+
     const itemEdits = edits[item.id];
 
     if (!itemEdits || typeof itemEdits !== "object") {
@@ -242,7 +611,12 @@ async function updateInventoryItemField(itemId, field, value) {
     return;
   }
 
-  const nextValue = String(value || "").trim() || "-";
+  if (isGoogleSheetManagedItem(item)) {
+    showToast("기구 정보는 연결된 Google Sheet에서 수정해주세요.");
+    return;
+  }
+
+  const nextValue = String(value ?? "").trim() || "-";
 
   if (String(item[field]) === nextValue) {
     return;
@@ -690,9 +1064,12 @@ function renderInspector(item) {
 function buildInventoryItems() {
   const reagentItems = baseReagents.map((reagent, index) => {
     const id = Number(reagent.id) || index + 1;
-    const lowStock = isLowStock(reagent);
+    const lowStock = reagent.lowStockMode === "bucket"
+      ? isReagentLowStock(reagent.remaining)
+      : Boolean(reagent.lowStock) || isLowStock(reagent);
     const detail = reagent.iupac || reagent.commonName || "시약 정보 없음";
     const formula = reagent.formula || reagent.structuralFormula || "-";
+    const remainingText = normalizeText(reagent.remaining);
 
     return {
       id: `시약-${String(id).padStart(3, "0")}`,
@@ -703,10 +1080,14 @@ function buildInventoryItems() {
       name: reagent.name || "이름 없음",
       detail,
       formula,
-      quantity: formatNumber(reagent.remainingAmount),
-      location: "시약장",
+      quantity: remainingText || formatNumber(reagent.remainingAmount),
+      location: reagent.location || "시약장",
       toxic: Boolean(reagent.toxic),
       lowStock,
+      lowStockMode: reagent.lowStockMode,
+      remainingBucket: remainingText,
+      sourceSheet: reagent.sourceSheet,
+      sourceCell: reagent.sourceCell,
       searchText: [
         "시약",
         reagent.category,
@@ -715,36 +1096,44 @@ function buildInventoryItems() {
         reagent.commonName,
         reagent.formula,
         reagent.structuralFormula,
+        reagent.remaining,
         reagent.remainingAmount,
       ].join(" ").toLowerCase(),
     };
   });
 
-  const equipmentItems = labItems.map((item, index) => ({
-    id: `${item.area}-${String(index + 1).padStart(3, "0")}`,
-    type: "equipment",
-    numericId: 10000 + index + 1,
-    area: item.area,
-    category: item.category || "위치 미정",
-    name: item.name || "이름 없음",
-    detail: item.location || "위치 미정",
-    formula: "-",
-    quantity: item.quantity || "-",
-    location: item.location || "위치 미정",
-    toxic: false,
-    lowStock: false,
-    sourceSheet: item.sourceSheet,
-    sourceCell: item.sourceCell,
-    searchText: [
-      item.area,
-      item.category,
-      item.name,
-      item.quantity,
-      item.location,
-      item.sourceSheet,
-      item.sourceCell,
-    ].join(" ").toLowerCase(),
-  }));
+  const equipmentItems = labItems.map((item, index) => {
+    const sheetId = normalizeText(item.id);
+    const fallbackId = `${item.area}-${String(index + 1).padStart(3, "0")}`;
+    const stableId = item.sourceSheet === SHEET_NAMES.labItems && sheetId ? sheetId : fallbackId;
+
+    return {
+      id: stableId,
+      type: "equipment",
+      numericId: 10000 + index + 1,
+      area: item.area,
+      category: item.category || "위치 미정",
+      name: item.name || "이름 없음",
+      detail: item.location || "위치 미정",
+      formula: "-",
+      quantity: item.quantity || "-",
+      location: item.location || "위치 미정",
+      toxic: false,
+      lowStock: false,
+      sourceSheet: item.sourceSheet,
+      sourceCell: item.sourceCell,
+      searchText: [
+        stableId,
+        item.area,
+        item.category,
+        item.name,
+        item.quantity,
+        item.location,
+        item.sourceSheet,
+        item.sourceCell,
+      ].join(" ").toLowerCase(),
+    };
+  });
 
   inventoryItems = [...reagentItems, ...equipmentItems];
   applyInventoryEdits();
@@ -854,11 +1243,15 @@ function buildCategoryFilters() {
   const categories = [...counts.entries()]
     .sort((a, b) => getCategorySortValue(a[0]).localeCompare(getCategorySortValue(b[0]), "ko-KR"));
 
+  if (filterState.category !== "all" && !counts.has(filterState.category)) {
+    filterState.category = "all";
+  }
+
   categoryList.innerHTML = "";
 
   const allButton = document.createElement("button");
   allButton.type = "button";
-  allButton.className = "category-chip is-active";
+  allButton.className = `category-chip${filterState.category === "all" ? " is-active" : ""}`;
   allButton.dataset.category = "all";
   allButton.innerHTML = `전체 <span>${getAreaItems().length.toLocaleString("ko-KR")}</span>`;
   categoryList.append(allButton);
@@ -866,7 +1259,7 @@ function buildCategoryFilters() {
   categories.forEach(([category, count]) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "category-chip";
+    button.className = `category-chip${filterState.category === category ? " is-active" : ""}`;
     button.dataset.category = category;
     button.innerHTML = `${escapeHtml(AREA_LABELS[category] || category)} <span>${count.toLocaleString("ko-KR")}</span>`;
     categoryList.append(button);
@@ -884,7 +1277,7 @@ function renderStats() {
 }
 
 function renderAdminEditInput(item, field, value, options = {}) {
-  if (!isReservationAdmin()) {
+  if (!isReservationAdmin() || isGoogleSheetManagedItem(item)) {
     return escapeHtml(value);
   }
 
@@ -901,8 +1294,13 @@ function renderAdminEditInput(item, field, value, options = {}) {
 
 function renderTable() {
   const rows = getFilteredItems();
+  const hadSelectedItem = Boolean(selectedItemId);
   const hasSelectedItem = rows.some((item) => item.id === selectedItemId);
   selectedItemId = hasSelectedItem ? selectedItemId : "";
+
+  if (hadSelectedItem && !hasSelectedItem && itemDetailModal && !itemDetailModal.hidden) {
+    closeItemDetailModal();
+  }
 
   visibleCount.textContent = rows.length.toLocaleString("ko-KR");
   emptyState.hidden = rows.length > 0;
@@ -940,6 +1338,14 @@ function renderTable() {
       `;
     })
     .join("");
+
+  if (selectedItemId && (!itemDetailModal || !itemDetailModal.hidden)) {
+    const selectedItem = inventoryItems.find((item) => item.id === selectedItemId);
+
+    if (selectedItem) {
+      renderInspector(selectedItem);
+    }
+  }
 
 }
 
@@ -2353,7 +2759,7 @@ tableBody.addEventListener("change", (event) => {
     return;
   }
 
-  updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
+  void updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
 });
 
 tableBody.addEventListener("focusout", (event) => {
@@ -2363,7 +2769,8 @@ tableBody.addEventListener("focusout", (event) => {
     return;
   }
 
-  updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
+  void updateInventoryItemField(field.dataset.itemId, field.dataset.editField, field.value);
+  window.setTimeout(flushPendingGoogleSheetWork, 0);
 });
 
 tableBody.addEventListener("click", (event) => {
@@ -2542,6 +2949,25 @@ try {
 buildInventoryItems();
 setTheme(savedTheme);
 renderDashboard();
+void requestGoogleSheetsSync({ announce: true, force: true });
+
+window.setInterval(() => {
+  void requestGoogleSheetsSync();
+}, SHEET_SYNC_INTERVAL_MS);
+
+window.addEventListener("focus", () => {
+  void requestGoogleSheetsSync();
+});
+
+window.addEventListener("online", () => {
+  void requestGoogleSheetsSync({ force: true });
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    void requestGoogleSheetsSync();
+  }
+});
 
 // Initial routing check on load
 if (window.location.hash === "#prep-room") {
