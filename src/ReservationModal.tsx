@@ -70,6 +70,21 @@ function getLocalDateValue(date = new Date()): string {
   return localDate.toISOString().slice(0, 10)
 }
 
+function formatReservationDate(dateValue: string): string {
+  const date = new Date(`${dateValue}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue
+  }
+
+  return date.toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  })
+}
+
 function parseTimeRange(value: string): readonly [number, number] | null {
   const matchedIndexes = TIME_SLOTS.reduce<number[]>((indexes, slot, index) => {
     if (value.includes(slot)) {
@@ -612,51 +627,40 @@ export default function ReservationModal({
             aria-labelledby={`${titleId}-schedule-tab`}
           >
             {approvedReservations.length ? (
-              <div className="reservation-admin__list">
+              <div className="reservation-admin__list reservation-approved-list">
                 {approvedReservations.map((reservation) => (
                   <article
                     key={reservation.id}
-                    className="reservation-request-card"
+                    className="reservation-request-card reservation-approved-card"
                   >
-                    <header className="reservation-request-card__header">
-                      <div>
+                    <header className="reservation-approved-card__header">
+                      <div className="reservation-approved-card__person">
+                        <span>예약자</span>
                         <h3>{reservation.applicantName || "이름 미입력"}</h3>
-                        <p>
-                          {reservation.date} · {reservation.time}
-                        </p>
                       </div>
                       <span className="reservation-request-card__status is-approved">
                         승인
                       </span>
                     </header>
 
-                    <dl className="reservation-request-card__details">
+                    <div
+                      className="reservation-approved-card__schedule"
+                      aria-label={`${reservation.date} ${reservation.time}`}
+                    >
+                      <time dateTime={reservation.date}>
+                        {formatReservationDate(reservation.date)}
+                      </time>
+                      <span aria-hidden="true" />
+                      <strong>{reservation.time}</strong>
+                    </div>
+
+                    <dl className="reservation-approved-card__details">
                       <div>
-                        <dt>신청자 이름</dt>
-                        <dd>{reservation.applicantName || "미입력"}</dd>
-                      </div>
-                      <div>
-                        <dt>학번</dt>
-                        <dd>{reservation.applicantStudentId || "미입력"}</dd>
-                      </div>
-                      <div>
-                        <dt>학급</dt>
+                        <dt>학급 / 동아리</dt>
                         <dd>{reservation.className || "미입력"}</dd>
                       </div>
                       <div>
-                        <dt>공간</dt>
-                        <dd>{reservation.room}</dd>
-                      </div>
-                      <div>
-                        <dt>날짜</dt>
-                        <dd>{reservation.date}</dd>
-                      </div>
-                      <div>
-                        <dt>시간</dt>
-                        <dd>{reservation.time}</dd>
-                      </div>
-                      <div className="is-wide">
-                        <dt>목적</dt>
+                        <dt>사용 목적</dt>
                         <dd>{reservation.purpose || "미입력"}</dd>
                       </div>
                     </dl>
