@@ -597,43 +597,31 @@ button:disabled {
   font-size: 10px;
 }
 
-.public-edit-note {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  margin-bottom: 14px;
-  padding: 12px 15px;
-  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--border));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--green) 8%, var(--surface-solid));
-  box-shadow: var(--shadow-sm);
-}
-
-.public-edit-note > span {
+.reagent-workspace-switch {
   display: grid;
-  width: 31px;
-  height: 31px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--green);
-  color: white;
-  font-size: 18px;
-  font-weight: 800;
+  width: min(420px, 100%);
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 0 auto 14px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-tertiary);
 }
 
-.public-edit-note div {
-  display: grid;
-  gap: 2px;
-}
-
-.public-edit-note strong {
-  font-size: 13px;
-}
-
-.public-edit-note small {
+.reagent-workspace-switch button {
+  min-height: 38px;
+  border-radius: 11px;
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.reagent-workspace-switch button.is-active {
+  background: var(--surface-solid);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+  color: var(--blue);
 }
 
 .inventory-layout {
@@ -971,7 +959,6 @@ button:disabled {
 .quantity-editor {
   display: grid;
   justify-items: end;
-  gap: 3px;
 }
 
 .quantity-editor select {
@@ -991,12 +978,6 @@ button:disabled {
 .quantity-editor select:focus-visible {
   border-color: var(--green);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 15%, transparent);
-}
-
-.quantity-editor small {
-  color: var(--green);
-  font-size: 8px;
-  font-weight: 800;
 }
 
 .status-badge {
@@ -1378,7 +1359,6 @@ button:disabled {
 .form-field,
 .reservation-form__grid label,
 .reservation-form__purpose,
-.reservation-schedule__controls label,
 .reservation-request-card__review label {
   display: grid;
   gap: 6px;
@@ -1386,7 +1366,6 @@ button:disabled {
 
 .form-field > span,
 .reservation-form label > span,
-.reservation-schedule__controls label > span,
 .reservation-request-card__review label > span {
   color: var(--text-secondary);
   font-size: 11px;
@@ -1397,8 +1376,6 @@ button:disabled {
 .reservation-form input,
 .reservation-form select,
 .reservation-form textarea,
-.reservation-schedule__controls input,
-.reservation-schedule__controls select,
 .reservation-request-card__review textarea {
   width: 100%;
   min-height: 41px;
@@ -1414,9 +1391,7 @@ button:disabled {
 .form-field input:focus,
 .reservation-form input:focus,
 .reservation-form select:focus,
-.reservation-form textarea:focus,
-.reservation-schedule__controls input:focus,
-.reservation-schedule__controls select:focus {
+.reservation-form textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
@@ -1634,117 +1609,6 @@ button:disabled {
 
 .reservation-modal__panel {
   min-height: 360px;
-}
-
-.reservation-schedule__controls {
-  display: flex;
-  gap: 10px;
-  align-items: end;
-}
-
-.reservation-schedule__controls label {
-  min-width: 180px;
-}
-
-.reservation-schedule__privacy-note {
-  margin: 14px 0 10px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-
-.reservation-schedule__table-wrap {
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-
-.reservation-schedule__table {
-  width: 100%;
-  min-width: 780px;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.reservation-schedule__table caption {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-}
-
-.reservation-schedule__table th,
-.reservation-schedule__table td {
-  height: 43px;
-  padding: 5px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  text-align: center;
-}
-
-.reservation-schedule__table thead th {
-  background: var(--surface-secondary);
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-.reservation-schedule__table thead small {
-  display: block;
-  color: var(--text-tertiary);
-  font-size: 8px;
-  font-weight: 500;
-}
-
-.reservation-schedule__table tbody th {
-  background: var(--surface-secondary);
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-.reservation-schedule__table td span {
-  display: inline-flex;
-  padding: 4px 7px;
-  border-radius: 999px;
-  font-size: 9px;
-  font-weight: 750;
-}
-
-.reservation-schedule__table td.is-available span {
-  background: color-mix(in srgb, var(--green) 12%, transparent);
-  color: var(--green);
-}
-
-.reservation-schedule__table td.is-reserved span {
-  background: color-mix(in srgb, var(--red) 10%, transparent);
-  color: var(--red);
-}
-
-.reservation-schedule__legend {
-  display: flex;
-  gap: 15px;
-  margin-top: 10px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-
-.reservation-schedule__legend span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.reservation-schedule__legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.reservation-schedule__legend i.is-available {
-  background: var(--green);
-}
-
-.reservation-schedule__legend i.is-reserved {
-  background: var(--red);
 }
 
 .reservation-form {
@@ -2887,10 +2751,6 @@ button:disabled {
     padding: 12px;
   }
 
-  .public-edit-note {
-    align-items: flex-start;
-  }
-
   .filter-sidebar {
     grid-template-columns: 1fr;
   }
@@ -3073,14 +2933,9 @@ button:disabled {
     min-width: 90px;
   }
 
-  .reservation-schedule__controls,
   .reservation-admin__toolbar {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .reservation-schedule__controls label {
-    min-width: 0;
   }
 
   .reservation-form__grid {

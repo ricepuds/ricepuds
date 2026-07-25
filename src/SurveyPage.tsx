@@ -266,6 +266,7 @@ export default function SurveyPage({
           <div className="flex min-w-0 items-center gap-2">
             {onBack ? (
               <button
+                aria-label="시약 분류표로 돌아가기"
                 type="button"
                 className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[15px] font-semibold text-[#007aff] transition active:scale-95"
                 onClick={onBack}
@@ -276,7 +277,7 @@ export default function SurveyPage({
                 >
                   ‹
                 </span>
-                <span className="hidden sm:inline">뒤로</span>
+                <span className="hidden sm:inline">분류표</span>
               </button>
             ) : null}
             <div className="min-w-0">
@@ -670,30 +671,6 @@ export default function SurveyPage({
             aria-labelledby={`${tabId}-waste-tab`}
             className="space-y-5"
           >
-            <div className="rounded-[26px] border border-red-200 bg-red-50 p-5 sm:p-6">
-              <div className="flex items-start gap-4">
-                <span
-                  aria-hidden="true"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-600 text-xl font-black text-white"
-                >
-                  !
-                </span>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-red-600">
-                    절대 혼합 금지
-                  </p>
-                  <h2 className="mt-1 text-xl font-bold tracking-[-0.025em] text-red-950">
-                    교사 확인 전에는 폐액을 붓지 마세요.
-                  </h2>
-                  <p className="mt-2 break-keep text-sm leading-6 text-red-800">
-                    용기 라벨, 폐액 종류, 서로 섞어도 되는지를 선생님과 함께
-                    확인한 뒤 지정된 용기에만 배출합니다. 학생이 임의로
-                    중화하거나 희석하지 않습니다.
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-2">
               {WASTE_CATEGORIES.map((category) => (
                 <article
@@ -717,46 +694,6 @@ export default function SurveyPage({
                 </article>
               ))}
             </div>
-
-            <section className="rounded-[24px] bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-6">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#007aff]">
-                Teacher Check
-              </p>
-              <h2 className="mt-1 text-xl font-bold tracking-[-0.025em]">
-                배출 전 3단계 교사 확인
-              </h2>
-              <ol className="mt-5 space-y-4">
-                {[
-                  [
-                    "1",
-                    "폐액 이름 확인",
-                    "사용한 시약과 반응 결과를 선생님께 정확히 말합니다.",
-                  ],
-                  [
-                    "2",
-                    "전용 용기 확인",
-                    "용기 라벨과 남은 용량을 선생님과 함께 확인합니다.",
-                  ],
-                  [
-                    "3",
-                    "배출 허락 받기",
-                    "선생님이 허락한 뒤 천천히 배출하고 뚜껑을 닫습니다.",
-                  ],
-                ].map(([number, title, description]) => (
-                  <li key={number} className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#007aff] text-xs font-bold text-white">
-                      {number}
-                    </span>
-                    <div>
-                      <strong className="text-sm">{title}</strong>
-                      <p className="mt-0.5 text-sm leading-6 text-[#636366]">
-                        {description}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </section>
 
             <div className="rounded-[22px] bg-[#1c1c1e] p-5 text-white">
               <p className="font-bold">쏟았거나 정체를 모르겠다면</p>

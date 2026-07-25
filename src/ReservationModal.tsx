@@ -70,20 +70,6 @@ function getLocalDateValue(date = new Date()): string {
   return localDate.toISOString().slice(0, 10)
 }
 
-function addDays(dateValue: string, days: number): string {
-  const date = new Date(`${dateValue}T00:00:00`)
-  date.setDate(date.getDate() + days)
-  return getLocalDateValue(date)
-}
-
-function formatDayLabel(dateValue: string): string {
-  return new Date(`${dateValue}T00:00:00`).toLocaleDateString("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-  })
-}
-
 function parseTimeRange(value: string): readonly [number, number] | null {
   const matchedIndexes = TIME_SLOTS.reduce<number[]>((indexes, slot, index) => {
     if (value.includes(slot)) {
@@ -207,8 +193,6 @@ export default function ReservationModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [mainTab, setMainTab] = useState<MainTab>("schedule")
   const [adminTab, setAdminTab] = useState<AdminTab>("pending")
-  const [scheduleRoom, setScheduleRoom] = useState<string>(ROOMS[0])
-  const [scheduleStartDate, setScheduleStartDate] = useState(today)
   const [form, setForm] = useState<ReservationFormState>(() =>
     createInitialForm(today),
   )
@@ -219,12 +203,17 @@ export default function ReservationModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
 
-  const scheduleDates = useMemo(
+  const approvedReservations = useMemo(
     () =>
-      Array.from({ length: 7 }, (_, index) =>
-        addDays(scheduleStartDate, index),
-      ),
-    [scheduleStartDate],
+      reservations
+        .filter((reservation) => reservation.status === "approved")
+        .sort((first, second) =>
+          `${first.date} ${first.time}`.localeCompare(
+            `${second.date} ${second.time}`,
+            "ko-KR",
+          ),
+        ),
+    [reservations],
   )
   const pendingReservations = useMemo(
     () =>
@@ -618,105 +607,67 @@ export default function ReservationModal({
         {mainTab === "schedule" ? (
           <div
             id={`${titleId}-schedule-panel`}
-            className="reservation-modal__panel reservation-schedule"
+            className="reservation-modal__panel reservation-admin"
             role="tabpanel"
             aria-labelledby={`${titleId}-schedule-tab`}
           >
-            <div className="reservation-schedule__controls">
-              <label>
-                <span>공간</span>
-                <select
-                  value={scheduleRoom}
-                  onChange={(event) => setScheduleRoom(event.target.value)}
-                >
-                  {ROOMS.map((room) => (
-                    <option key={room} value={room}>
-                      {room}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>조회 시작일</span>
-                <input
-                  type="date"
-                  min={today}
-                  value={scheduleStartDate}
-                  onChange={(event) =>
-                    setScheduleStartDate(event.target.value || today)
-                  }
-                />
-              </label>
-            </div>
+            {approvedReservations.length ? (
+              <div className="reservation-admin__list">
+                {approvedReservations.map((reservation) => (
+                  <article
+                    key={reservation.id}
+                    className="reservation-request-card"
+                  >
+                    <header className="reservation-request-card__header">
+                      <div>
+                        <h3>{reservation.applicantName || "이름 미입력"}</h3>
+                        <p>
+                          {reservation.date} · {reservation.time}
+                        </p>
+                      </div>
+                      <span className="reservation-request-card__status is-approved">
+                        승인
+                      </span>
+                    </header>
 
-            <p className="reservation-schedule__privacy-note">
-              공개 현황에는 예약 가능 여부만 표시되며 신청자 정보는 공개되지
-              않습니다.
-            </p>
-
-            <div className="reservation-schedule__table-wrap">
-              <table className="reservation-schedule__table">
-                <caption>
-                  {scheduleRoom}의 {formatDayLabel(scheduleDates[0])}부터 7일간
-                  예약 현황
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">교시</th>
-                    {scheduleDates.map((date) => (
-                      <th key={date} scope="col">
-                        <span>{formatDayLabel(date)}</span>
-                        <small>{date}</small>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {TIME_SLOTS.map((slot, slotIndex) => (
-                    <tr key={slot}>
-                      <th scope="row">{slot}</th>
-                      {scheduleDates.map((date) => {
-                        const reserved = hasConflict(
-                          reservations,
-                          blocks,
-                          scheduleRoom,
-                          date,
-                          [slotIndex, slotIndex],
-                        )
-
-                        return (
-                          <td
-                            key={`${date}-${slot}`}
-                            className={
-                              reserved ? "is-reserved" : "is-available"
-                            }
-                            aria-label={`${formatDayLabel(date)} ${slot} ${
-                              reserved ? "예약됨" : "예약 가능"
-                            }`}
-                          >
-                            <span>{reserved ? "예약됨" : "가능"}</span>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div
-              className="reservation-schedule__legend"
-              aria-label="예약 상태 범례"
-            >
-              <span>
-                <i className="is-available" aria-hidden="true" />
-                예약 가능
-              </span>
-              <span>
-                <i className="is-reserved" aria-hidden="true" />
-                예약됨
-              </span>
-            </div>
+                    <dl className="reservation-request-card__details">
+                      <div>
+                        <dt>신청자 이름</dt>
+                        <dd>{reservation.applicantName || "미입력"}</dd>
+                      </div>
+                      <div>
+                        <dt>학번</dt>
+                        <dd>{reservation.applicantStudentId || "미입력"}</dd>
+                      </div>
+                      <div>
+                        <dt>학급</dt>
+                        <dd>{reservation.className || "미입력"}</dd>
+                      </div>
+                      <div>
+                        <dt>공간</dt>
+                        <dd>{reservation.room}</dd>
+                      </div>
+                      <div>
+                        <dt>날짜</dt>
+                        <dd>{reservation.date}</dd>
+                      </div>
+                      <div>
+                        <dt>시간</dt>
+                        <dd>{reservation.time}</dd>
+                      </div>
+                      <div className="is-wide">
+                        <dt>목적</dt>
+                        <dd>{reservation.purpose || "미입력"}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="reservation-admin__empty">
+                승인된 예약이 아직 없습니다.
+              </p>
+            )}
           </div>
         ) : null}
 

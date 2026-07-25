@@ -133,7 +133,6 @@ function Header({
   onHome,
   onSpaces,
   onInventory,
-  onSurvey,
   onAdmin,
   onAbout,
   onReservation,
@@ -147,7 +146,6 @@ function Header({
   onHome: () => void
   onSpaces: () => void
   onInventory: () => void
-  onSurvey: () => void
   onAdmin: () => void
   onAbout: () => void
   onReservation: () => void
@@ -213,18 +211,13 @@ function Header({
             공지
           </button>
           <button
-            className={view === "inventory" ? "is-active" : ""}
+            className={
+              view === "inventory" || view === "survey" ? "is-active" : ""
+            }
             onClick={onInventory}
             type="button"
           >
-            자료실
-          </button>
-          <button
-            className={view === "survey" ? "is-active" : ""}
-            onClick={onSurvey}
-            type="button"
-          >
-            시약 조사
+            분류표
           </button>
           <button onClick={onReservation} type="button">
             예약
@@ -307,8 +300,7 @@ function Header({
                 ["NOW", onHome],
                 ["실험실", onSpaces],
                 ["공지", onAbout],
-                ["자료실", onInventory],
-                ["시약 조사", onSurvey],
+                ["분류표", onInventory],
                 ["예약", onReservation],
                 ...(user?.isAdmin ? [["관리자", onAdmin]] : []),
               ].map(([label, action]) => (
@@ -946,7 +938,6 @@ export default function App() {
         onInventory={() => navigate("inventory", "전체")}
         onReservation={() => setModal("reservation")}
         onSpaces={openSpaces}
-        onSurvey={() => navigate("survey", "시약")}
         onToggleTheme={() =>
           setTheme((current) => (current === "light" ? "dark" : "light"))
         }
@@ -959,7 +950,6 @@ export default function App() {
         <HomePage
           items={items}
           onOpenArea={(area) => navigate("inventory", area)}
-          onOpenSurvey={() => navigate("survey", "시약")}
           source={dataSource}
           user={user}
         />
@@ -972,6 +962,7 @@ export default function App() {
           items={items}
           onAreaChange={(area) => navigate("inventory", area)}
           onEdit={handleInventoryEdit}
+          onOpenSurvey={() => navigate("survey", "시약")}
           onSelect={setSelectedItem}
           onSync={() => void syncInventory(true)}
           syncStatus={syncStatus}

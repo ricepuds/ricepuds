@@ -14,6 +14,7 @@ interface InventoryPageProps {
   syncStatus: "idle" | "syncing" | "success" | "partial" | "error"
   dataSource: "static" | "live"
   onAreaChange: (area: Area) => void
+  onOpenSurvey: () => void
   onSync: () => void
   onSelect: (item: InventoryItem) => void
   onEdit: (
@@ -152,7 +153,6 @@ function QuantityField({
           </option>
         ))}
       </select>
-      <small>누구나 수정</small>
     </label>
   )
 }
@@ -164,6 +164,7 @@ export default function InventoryPage({
   syncStatus,
   dataSource,
   onAreaChange,
+  onOpenSurvey,
   onSync,
   onSelect,
   onEdit,
@@ -240,6 +241,20 @@ export default function InventoryPage({
       </div>
 
       <div className="inventory-shell">
+        {activeArea === "시약" && (
+          <nav
+            aria-label="시약 분류표 메뉴"
+            className="reagent-workspace-switch"
+          >
+            <button className="is-active" type="button">
+              시약 분류표
+            </button>
+            <button onClick={onOpenSurvey} type="button">
+              시약 조사
+            </button>
+          </nav>
+        )}
+
         {isAdmin && (
           <section
             className="inventory-admin-summary"
@@ -249,8 +264,7 @@ export default function InventoryPage({
               <p className="eyebrow">Admin workspace</p>
               <h2>관리자 패널</h2>
               <span>
-                잔량은 모두가 수정하며, Sheet 관리 품목의 나머지 정보는 원본
-                시트에서 관리합니다.
+                Sheet 관리 품목의 기본 정보는 원본 시트에서 관리합니다.
               </span>
             </div>
             <div className="admin-metrics">
@@ -268,17 +282,6 @@ export default function InventoryPage({
             </div>
           </section>
         )}
-
-        <section className="public-edit-note" aria-label="잔량 수정 안내">
-          <span aria-hidden="true">↻</span>
-          <div>
-            <strong>시약 잔량은 누구나 바로 수정할 수 있어요.</strong>
-            <small>
-              표의 잔량 메뉴에서 현재 수준을 선택하면 모든 사용자에게
-              공유됩니다.
-            </small>
-          </div>
-        </section>
 
         <div className="inventory-layout">
           <aside className="filter-sidebar">

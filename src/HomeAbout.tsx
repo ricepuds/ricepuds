@@ -81,7 +81,6 @@ interface HomePageProps {
   user: AuthUser | null
   source: "static" | "live"
   onOpenArea: (area: Area) => void
-  onOpenSurvey: () => void
 }
 
 export function HomePage({
@@ -89,7 +88,6 @@ export function HomePage({
   user,
   source,
   onOpenArea,
-  onOpenSurvey,
 }: HomePageProps) {
   const areaCount = (area: Area) =>
     area === "전체"
@@ -119,10 +117,10 @@ export function HomePage({
           </button>
           <button
             className="button secondary"
-            onClick={onOpenSurvey}
+            onClick={() => onOpenArea("시약")}
             type="button"
           >
-            시약 조사
+            시약 분류표
           </button>
         </div>
         <small className="hero-note">
