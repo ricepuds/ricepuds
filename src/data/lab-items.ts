@@ -1,4 +1,4 @@
-window.LAB_ITEMS = [
+export const LAB_ITEMS = [
   {
     "id": "화학실-001",
     "area": "화학실",

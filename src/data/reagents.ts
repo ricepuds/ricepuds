@@ -1,4 +1,4 @@
-window.REAGENTS = [
+export const REAGENTS = [
   {
     "id": 1,
     "category": "A.산",

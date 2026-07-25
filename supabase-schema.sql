@@ -41,6 +41,17 @@ create table if not exists public.science_lab_notices (
   created_at_sort timestamptz not null default now()
 );
 
+create table if not exists public.science_lab_reservation_blocks (
+  id text primary key,
+  room text not null,
+  date text not null,
+  start_time text not null,
+  end_time text not null,
+  reason text not null,
+  created_at text not null,
+  created_at_sort timestamptz not null default now()
+);
+
 create table if not exists public.science_lab_inventory_edits (
   item_id text not null,
   field_name text not null check (field_name in ('category', 'name', 'detail', 'quantity', 'location')),
@@ -51,6 +62,7 @@ create table if not exists public.science_lab_inventory_edits (
 
 alter table public.science_lab_reservations enable row level security;
 alter table public.science_lab_notices enable row level security;
+alter table public.science_lab_reservation_blocks enable row level security;
 alter table public.science_lab_inventory_edits enable row level security;
 
 grant usage on schema public to anon, authenticated;
@@ -58,8 +70,13 @@ grant select, insert on public.science_lab_reservations to anon, authenticated;
 grant update (status, status_reason), delete on public.science_lab_reservations to authenticated;
 grant select on public.science_lab_notices to anon, authenticated;
 grant insert, delete on public.science_lab_notices to authenticated;
+grant select on public.science_lab_reservation_blocks to anon, authenticated;
+grant insert, delete on public.science_lab_reservation_blocks to authenticated;
 grant select on public.science_lab_inventory_edits to anon, authenticated;
-grant insert, update, delete on public.science_lab_inventory_edits to authenticated;
+revoke update on public.science_lab_inventory_edits from anon, authenticated;
+grant insert on public.science_lab_inventory_edits to anon;
+grant insert, delete on public.science_lab_inventory_edits to authenticated;
+grant update (field_value, updated_at) on public.science_lab_inventory_edits to anon, authenticated;
 
 drop policy if exists "Anyone can read science lab reservations" on public.science_lab_reservations;
 create policy "Anyone can read science lab reservations"
@@ -106,6 +123,24 @@ create policy "Admins can delete science lab notices"
   for delete
   using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
 
+drop policy if exists "Anyone can read science lab reservation blocks" on public.science_lab_reservation_blocks;
+create policy "Anyone can read science lab reservation blocks"
+  on public.science_lab_reservation_blocks
+  for select
+  using (true);
+
+drop policy if exists "Admins can create science lab reservation blocks" on public.science_lab_reservation_blocks;
+create policy "Admins can create science lab reservation blocks"
+  on public.science_lab_reservation_blocks
+  for insert
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+
+drop policy if exists "Admins can delete science lab reservation blocks" on public.science_lab_reservation_blocks;
+create policy "Admins can delete science lab reservation blocks"
+  on public.science_lab_reservation_blocks
+  for delete
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+
 drop policy if exists "Anyone can read science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Anyone can read science lab inventory edits"
   on public.science_lab_inventory_edits
@@ -124,6 +159,19 @@ create policy "Admins can update science lab inventory edits"
   for update
   using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'))
   with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+
+drop policy if exists "Anyone can create quantity inventory edits" on public.science_lab_inventory_edits;
+create policy "Anyone can create quantity inventory edits"
+  on public.science_lab_inventory_edits
+  for insert
+  with check (field_name = 'quantity');
+
+drop policy if exists "Anyone can update quantity inventory edits" on public.science_lab_inventory_edits;
+create policy "Anyone can update quantity inventory edits"
+  on public.science_lab_inventory_edits
+  for update
+  using (field_name = 'quantity')
+  with check (field_name = 'quantity');
 
 drop policy if exists "Admins can delete science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Admins can delete science lab inventory edits"
