@@ -17,7 +17,11 @@ interface AuthSession {
 const SUPABASE_URL = "https://exgbktkirqnqyjvbwupp.supabase.co"
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2JrdGtpcnFucXlqdmJ3dXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NTM2OTksImV4cCI6MjA5NDQyOTY5OX0._Oposq5zl8n0O96qk9I1pgUPi6XeNEuMq_Hz8Bgh5kg"
-export const ADMIN_EMAILS = ["rices2114@gmail.com", "2min095156@gmail.com"]
+export const ADMIN_EMAILS = [
+  "rices2114@gmail.com",
+  "2min095156@gmail.com",
+  "stst5192@naver.com",
+]
 
 const RESERVATIONS_TABLE = "science_lab_reservations"
 const RESERVATION_BLOCKS_TABLE = "science_lab_reservation_blocks"

@@ -94,14 +94,14 @@ drop policy if exists "Authenticated users can clear science lab reservations" o
 create policy "Authenticated users can clear science lab reservations"
   on public.science_lab_reservations
   for delete
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Admins can update science lab reservation status" on public.science_lab_reservations;
 create policy "Admins can update science lab reservation status"
   on public.science_lab_reservations
   for update
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'))
-  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'))
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Anyone can read science lab notices" on public.science_lab_notices;
 create policy "Anyone can read science lab notices"
@@ -114,14 +114,14 @@ drop policy if exists "Admins can create science lab notices" on public.science_
 create policy "Admins can create science lab notices"
   on public.science_lab_notices
   for insert
-  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Authenticated users can delete science lab notices" on public.science_lab_notices;
 drop policy if exists "Admins can delete science lab notices" on public.science_lab_notices;
 create policy "Admins can delete science lab notices"
   on public.science_lab_notices
   for delete
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Anyone can read science lab reservation blocks" on public.science_lab_reservation_blocks;
 create policy "Anyone can read science lab reservation blocks"
@@ -133,13 +133,13 @@ drop policy if exists "Admins can create science lab reservation blocks" on publ
 create policy "Admins can create science lab reservation blocks"
   on public.science_lab_reservation_blocks
   for insert
-  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Admins can delete science lab reservation blocks" on public.science_lab_reservation_blocks;
 create policy "Admins can delete science lab reservation blocks"
   on public.science_lab_reservation_blocks
   for delete
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Anyone can read science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Anyone can read science lab inventory edits"
@@ -151,14 +151,14 @@ drop policy if exists "Admins can create science lab inventory edits" on public.
 create policy "Admins can create science lab inventory edits"
   on public.science_lab_inventory_edits
   for insert
-  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Admins can update science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Admins can update science lab inventory edits"
   on public.science_lab_inventory_edits
   for update
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'))
-  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'))
+  with check (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
 
 drop policy if exists "Anyone can create quantity inventory edits" on public.science_lab_inventory_edits;
 create policy "Anyone can create quantity inventory edits"
@@ -177,4 +177,4 @@ drop policy if exists "Admins can delete science lab inventory edits" on public.
 create policy "Admins can delete science lab inventory edits"
   on public.science_lab_inventory_edits
   for delete
-  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com'));
+  using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
