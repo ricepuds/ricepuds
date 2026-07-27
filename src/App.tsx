@@ -6,6 +6,7 @@ import { AboutPage, HomePage } from "./HomeAbout"
 import InventoryPage from "./InventoryPage"
 import ReservationModal from "./ReservationModal"
 import SurveyPage from "./SurveyPage"
+import VideoPage from "./VideoPage"
 import {
   buildInventoryItems,
   loadLiveInventory,
@@ -43,7 +44,7 @@ import type {
   ToastMessage,
 } from "./types"
 
-type View = "home" | "inventory" | "survey" | "about" | "admin"
+type View = "home" | "inventory" | "survey" | "about" | "admin" | "videos"
 type ModalName = "auth" | "account" | "reservation" | null
 type Theme = "light" | "dark"
 type SyncStatus = "idle" | "syncing" | "success" | "partial" | "error"
@@ -107,6 +108,7 @@ function parseRoute(): { view: View; area: Area } {
 
   if (rawHash === "survey") return { view: "survey", area: "시약" }
   if (rawHash === "admin") return { view: "admin", area: "전체" }
+  if (rawHash === "videos") return { view: "videos", area: "전체" }
   if (rawHash === "about") return { view: "about", area: "전체" }
   return { view: "home", area: "전체" }
 }
@@ -115,6 +117,7 @@ function routeHash(view: View, area: Area): string {
   if (view === "inventory") return `#prep-room/${encodeURIComponent(area)}`
   if (view === "survey") return "#survey"
   if (view === "admin") return "#admin"
+  if (view === "videos") return "#videos"
   if (view === "about") return "#about"
   return window.location.pathname + window.location.search
 }
@@ -134,6 +137,7 @@ function Header({
   onSpaces,
   onInventory,
   onAdmin,
+  onVideos,
   onAbout,
   onReservation,
   onAuth,
@@ -147,6 +151,7 @@ function Header({
   onSpaces: () => void
   onInventory: () => void
   onAdmin: () => void
+  onVideos: () => void
   onAbout: () => void
   onReservation: () => void
   onAuth: () => void
@@ -231,6 +236,7 @@ function Header({
               관리
             </button>
           )}
+          <button className={view === "videos" ? "is-active" : ""} onClick={onVideos} type="button">영상</button>
         </nav>
 
         <div className="header-actions">
@@ -303,6 +309,7 @@ function Header({
                 ["분류표", onInventory],
                 ["예약", onReservation],
                 ...(user?.isAdmin ? [["관리자", onAdmin]] : []),
+                ["영상", onVideos],
               ].map(([label, action]) => (
                 <button
                   key={String(label)}
@@ -931,6 +938,7 @@ export default function App() {
     <div className="app-shell">
       <Header
         onAdmin={() => navigate("admin", "전체")}
+        onVideos={() => navigate("videos", "전체")}
         onAbout={() => navigate("about", activeArea)}
         onAccount={() => setModal("account")}
         onAuth={() => setModal("auth")}
@@ -986,6 +994,7 @@ export default function App() {
           onDeleteNotice={handleDeleteNotice}
         />
       )}
+      {view === "videos" && <VideoPage />}
       {view === "admin" &&
         (user?.isAdmin ? (
           <AdminDashboard

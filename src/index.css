@@ -122,6 +122,23 @@ button:disabled {
   min-height: 100vh;
 }
 
+.video-page { width: min(1180px, calc(100% - 36px)); min-height: 100vh; margin: 0 auto; padding: 112px 0 80px; }
+.video-page-hero { max-width: 720px; margin-bottom: 32px; }
+.video-page-hero .eyebrow { margin-bottom: 10px; color: var(--blue); }
+.video-page-hero h1 { margin: 0; font-size: clamp(34px, 5vw, 52px); letter-spacing: -0.055em; line-height: 1.06; }
+.video-page-hero > p:last-child { margin: 16px 0 0; color: var(--text-secondary); font-size: 16px; line-height: 1.7; }
+.video-library { display: grid; gap: 24px; }
+.video-card { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, .8fr); overflow: hidden; border: 1px solid var(--border); border-radius: 24px; background: var(--surface-solid); box-shadow: var(--shadow-sm); }
+.video-frame { position: relative; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; background: #000; }
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-card-copy { display: flex; align-items: flex-start; flex-direction: column; justify-content: center; padding: 30px; }
+.video-badge { padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 11%, transparent); color: var(--blue); font-size: 12px; font-weight: 750; }
+.video-card-copy h2 { margin: 16px 0 10px; font-size: 23px; letter-spacing: -.035em; line-height: 1.25; }
+.video-card-copy p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
+.video-card-copy a { display: inline-flex; align-items: center; gap: 6px; margin-top: 22px; color: var(--blue); font-size: 14px; font-weight: 700; text-decoration: none; }
+.video-card-copy a:hover { text-decoration: underline; }
+
+
 .site-header {
   position: fixed;
   z-index: 100;
@@ -2760,6 +2777,8 @@ button:disabled {
 }
 
 @media (max-width: 800px) {
+  .video-card { grid-template-columns: 1fr; }
+
   .desktop-nav,
   .header-actions > .theme-toggle,
   .header-actions > .login-button,
@@ -2838,6 +2857,14 @@ button:disabled {
 }
 
 @media (max-width: 620px) {
+  .video-page { width: min(100% - 24px, 1180px); padding: 88px 0 48px; }
+  .video-page-hero { margin-bottom: 22px; }
+  .video-page-hero h1 { font-size: 36px; }
+  .video-page-hero > p:last-child { font-size: 14px; }
+  .video-card { border-radius: 18px; }
+  .video-card-copy { padding: 22px; }
+  .video-card-copy h2 { font-size: 20px; }
+
   .hero {
     padding: 66px 17px 48px;
   }
