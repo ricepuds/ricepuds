@@ -4,6 +4,7 @@ import AdminDashboard from "./AdminDashboard"
 import CabinetViewer from "./CabinetViewer"
 import { AboutPage, HomePage } from "./HomeAbout"
 import InventoryPage from "./InventoryPage"
+import QnaPage from "./QnaPage"
 import ReservationModal from "./ReservationModal"
 import SurveyPage from "./SurveyPage"
 import VideoPage from "./VideoPage"
@@ -44,7 +45,7 @@ import type {
   ToastMessage,
 } from "./types"
 
-type View = "home" | "inventory" | "survey" | "about" | "admin" | "videos"
+type View = "home" | "inventory" | "survey" | "about" | "questions" | "admin" | "videos"
 type ModalName = "auth" | "account" | "reservation" | null
 type Theme = "light" | "dark"
 type SyncStatus = "idle" | "syncing" | "success" | "partial" | "error"
@@ -107,6 +108,7 @@ function parseRoute(): { view: View; area: Area } {
   }
 
   if (rawHash === "survey") return { view: "survey", area: "시약" }
+  if (rawHash === "questions") return { view: "questions", area: "전체" }
   if (rawHash === "admin") return { view: "admin", area: "전체" }
   if (rawHash === "videos") return { view: "videos", area: "전체" }
   if (rawHash === "about") return { view: "about", area: "전체" }
@@ -116,6 +118,7 @@ function parseRoute(): { view: View; area: Area } {
 function routeHash(view: View, area: Area): string {
   if (view === "inventory") return `#prep-room/${encodeURIComponent(area)}`
   if (view === "survey") return "#survey"
+  if (view === "questions") return "#questions"
   if (view === "admin") return "#admin"
   if (view === "videos") return "#videos"
   if (view === "about") return "#about"
@@ -139,6 +142,7 @@ function Header({
   onAdmin,
   onVideos,
   onAbout,
+  onQuestions,
   onReservation,
   onAuth,
   onAccount,
@@ -153,6 +157,7 @@ function Header({
   onAdmin: () => void
   onVideos: () => void
   onAbout: () => void
+  onQuestions: () => void
   onReservation: () => void
   onAuth: () => void
   onAccount: () => void
@@ -214,6 +219,13 @@ function Header({
             type="button"
           >
             공지
+          </button>
+          <button
+            className={view === "questions" ? "is-active" : ""}
+            onClick={onQuestions}
+            type="button"
+          >
+            질문방
           </button>
           <button
             className={
@@ -306,6 +318,7 @@ function Header({
                 ["NOW", onHome],
                 ["실험실", onSpaces],
                 ["공지", onAbout],
+                ["질문방", onQuestions],
                 ["분류표", onInventory],
                 ["예약", onReservation],
                 ...(user?.isAdmin ? [["관리자", onAdmin]] : []),
@@ -944,6 +957,7 @@ export default function App() {
         onAuth={() => setModal("auth")}
         onHome={() => navigate("home", activeArea)}
         onInventory={() => navigate("inventory", "전체")}
+        onQuestions={() => navigate("questions", "전체")}
         onReservation={() => setModal("reservation")}
         onSpaces={openSpaces}
         onToggleTheme={() =>
@@ -992,6 +1006,13 @@ export default function App() {
           notices={notices}
           onAddNotice={handleAddNotice}
           onDeleteNotice={handleDeleteNotice}
+        />
+      )}
+      {view === "questions" && (
+        <QnaPage
+          onRequireLogin={() => setModal("auth")}
+          onToast={showToast}
+          user={user}
         />
       )}
       {view === "videos" && <VideoPage />}

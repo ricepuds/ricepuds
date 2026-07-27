@@ -65,6 +65,22 @@ export interface Notice {
   createdAt: string
 }
 
+export interface QuestionAnswer {
+  id: string
+  questionId: string
+  content: string
+  authorName: string
+  createdAt: string
+}
+
+export interface QuestionPost {
+  id: string
+  content: string
+  authorName: string
+  createdAt: string
+  answers: QuestionAnswer[]
+}
+
 export interface AuthUser {
   email: string
   isAdmin: boolean

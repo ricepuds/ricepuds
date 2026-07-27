@@ -60,10 +60,42 @@ create table if not exists public.science_lab_inventory_edits (
   primary key (item_id, field_name)
 );
 
+create table if not exists public.science_lab_questions (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_name text not null default left(coalesce(
+    nullif(auth.jwt() -> 'user_metadata' ->> 'name', ''),
+    nullif(split_part(auth.jwt() ->> 'email', '@', 1), ''),
+    '사용자'
+  ), 40),
+  content text not null check (char_length(btrim(content)) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.science_lab_answers (
+  id uuid primary key default gen_random_uuid(),
+  question_id uuid not null references public.science_lab_questions(id) on delete cascade,
+  author_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_name text not null default left(coalesce(
+    nullif(auth.jwt() -> 'user_metadata' ->> 'name', ''),
+    nullif(split_part(auth.jwt() ->> 'email', '@', 1), ''),
+    '사용자'
+  ), 40),
+  content text not null check (char_length(btrim(content)) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists science_lab_questions_created_at_idx
+  on public.science_lab_questions (created_at desc);
+create index if not exists science_lab_answers_question_created_at_idx
+  on public.science_lab_answers (question_id, created_at asc);
+
 alter table public.science_lab_reservations enable row level security;
 alter table public.science_lab_notices enable row level security;
 alter table public.science_lab_reservation_blocks enable row level security;
 alter table public.science_lab_inventory_edits enable row level security;
+alter table public.science_lab_questions enable row level security;
+alter table public.science_lab_answers enable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select, insert on public.science_lab_reservations to anon, authenticated;
@@ -77,6 +109,10 @@ revoke update on public.science_lab_inventory_edits from anon, authenticated;
 grant insert on public.science_lab_inventory_edits to anon;
 grant insert, delete on public.science_lab_inventory_edits to authenticated;
 grant update (field_value, updated_at) on public.science_lab_inventory_edits to anon, authenticated;
+grant select on public.science_lab_questions, public.science_lab_answers to anon, authenticated;
+revoke insert, update, delete on public.science_lab_questions, public.science_lab_answers from anon, authenticated;
+grant insert (content) on public.science_lab_questions to authenticated;
+grant insert (question_id, content) on public.science_lab_answers to authenticated;
 
 drop policy if exists "Anyone can read science lab reservations" on public.science_lab_reservations;
 create policy "Anyone can read science lab reservations"
@@ -178,3 +214,31 @@ create policy "Admins can delete science lab inventory edits"
   on public.science_lab_inventory_edits
   for delete
   using (lower(auth.jwt() ->> 'email') in ('rices2114@gmail.com', '2min095156@gmail.com', 'stst5192@naver.com'));
+
+drop policy if exists "Anyone can read science lab questions" on public.science_lab_questions;
+create policy "Anyone can read science lab questions"
+  on public.science_lab_questions
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "Authenticated users can create own questions" on public.science_lab_questions;
+create policy "Authenticated users can create own questions"
+  on public.science_lab_questions
+  for insert
+  to authenticated
+  with check (auth.uid() = author_id);
+
+drop policy if exists "Anyone can read science lab answers" on public.science_lab_answers;
+create policy "Anyone can read science lab answers"
+  on public.science_lab_answers
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "Authenticated users can create own answers" on public.science_lab_answers;
+create policy "Authenticated users can create own answers"
+  on public.science_lab_answers
+  for insert
+  to authenticated
+  with check (auth.uid() = author_id);

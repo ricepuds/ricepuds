@@ -1,6 +1,8 @@
 import type {
   InventoryEdits,
   Notice,
+  QuestionAnswer,
+  QuestionPost,
   Reservation,
   ReservationBlock,
   ReservationStatus,
@@ -27,6 +29,8 @@ const RESERVATIONS_TABLE = "science_lab_reservations"
 const RESERVATION_BLOCKS_TABLE = "science_lab_reservation_blocks"
 const NOTICES_TABLE = "science_lab_notices"
 const INVENTORY_EDITS_TABLE = "science_lab_inventory_edits"
+const QUESTIONS_TABLE = "science_lab_questions"
+const ANSWERS_TABLE = "science_lab_answers"
 
 let client: SupabaseClient | null | undefined
 
@@ -305,6 +309,86 @@ export async function removeNotice(id: string): Promise<void> {
     .delete()
     .eq("id", id)
   throwIfError(error)
+}
+
+function mapQuestionAnswer(row: any): QuestionAnswer {
+  return {
+    id: String(row.id),
+    questionId: String(row.question_id),
+    content: String(row.content ?? ""),
+    authorName: String(row.author_name ?? "사용자"),
+    createdAt: String(row.created_at ?? ""),
+  }
+}
+
+function mapQuestion(row: any): QuestionPost {
+  return {
+    id: String(row.id),
+    content: String(row.content ?? ""),
+    authorName: String(row.author_name ?? "사용자"),
+    createdAt: String(row.created_at ?? ""),
+    answers: [],
+  }
+}
+
+export async function loadQuestionThreads(): Promise<QuestionPost[]> {
+  const supabase = requiredClient()
+  const [questionsResult, answersResult] = await Promise.all([
+    supabase
+      .from(QUESTIONS_TABLE)
+      .select("id, content, author_name, created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from(ANSWERS_TABLE)
+      .select("id, question_id, content, author_name, created_at")
+      .order("created_at", { ascending: true }),
+  ])
+
+  throwIfError(questionsResult.error)
+  throwIfError(answersResult.error)
+
+  const answersByQuestion = new Map<string, QuestionAnswer[]>()
+  for (const row of answersResult.data ?? []) {
+    const answer = mapQuestionAnswer(row)
+    const current = answersByQuestion.get(answer.questionId) ?? []
+    current.push(answer)
+    answersByQuestion.set(answer.questionId, current)
+  }
+
+  return (questionsResult.data ?? []).map((row: any) => {
+    const question = mapQuestion(row)
+    return {
+      ...question,
+      answers: answersByQuestion.get(question.id) ?? [],
+    }
+  })
+}
+
+export async function createQuestion(content: string): Promise<QuestionPost> {
+  const { data, error } = await requiredClient()
+    .from(QUESTIONS_TABLE)
+    .insert({ content: content.trim() })
+    .select("id, content, author_name, created_at")
+    .single()
+
+  throwIfError(error)
+  if (!data) throw new Error("질문 저장 결과를 불러오지 못했습니다.")
+  return mapQuestion(data)
+}
+
+export async function createQuestionAnswer(
+  questionId: string,
+  content: string,
+): Promise<QuestionAnswer> {
+  const { data, error } = await requiredClient()
+    .from(ANSWERS_TABLE)
+    .insert({ question_id: questionId, content: content.trim() })
+    .select("id, question_id, content, author_name, created_at")
+    .single()
+
+  throwIfError(error)
+  if (!data) throw new Error("답변 저장 결과를 불러오지 못했습니다.")
+  return mapQuestionAnswer(data)
 }
 
 export async function loadInventoryEdits(): Promise<InventoryEdits> {
