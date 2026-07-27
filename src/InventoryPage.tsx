@@ -494,6 +494,11 @@ export default function InventoryPage({
                             onCommit={(value) => onEdit(item, "name", value)}
                             value={item.name}
                           />
+                          {item.type === "reagent" && (
+                            <small className="row-name-english">
+                              {item.detail}
+                            </small>
+                          )}
                           <EditableField
                             label={`${item.name} 위치`}
                             onCommit={(value) =>
@@ -505,6 +510,11 @@ export default function InventoryPage({
                       ) : (
                         <>
                           <strong>{item.name}</strong>
+                          {item.type === "reagent" && (
+                            <small className="row-name-english">
+                              {item.detail}
+                            </small>
+                          )}
                           <small>{item.location}</small>
                         </>
                       )}

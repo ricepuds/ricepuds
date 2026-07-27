@@ -1077,6 +1077,10 @@ button:disabled {
   white-space: nowrap;
 }
 
+.row-name-english {
+  display: none;
+}
+
 .row-detail {
   overflow: hidden;
   color: var(--text-secondary);
@@ -2968,6 +2972,17 @@ button:disabled {
 
   .inventory-row > :nth-child(4) {
     display: none;
+  }
+
+  .row-name-english {
+    display: block;
+    overflow: visible;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .inventory-row-head {
