@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type {
   Area,
   InventoryEdits,
@@ -41,6 +41,7 @@ const REMAINING_LEVELS = [
   "거의없음",
   "수량미기록",
 ] as const
+const CUSTOM_QUANTITY_VALUE = "__custom_quantity__"
 
 function getStatus(item: InventoryItem): InventoryStatus {
   if (item.toxic) return "toxic"
@@ -130,30 +131,99 @@ function QuantityField({
   item: InventoryItem
   onCommit: (value: string) => void
 }) {
-  const options = REMAINING_LEVELS.includes(
+  const isPresetQuantity = REMAINING_LEVELS.includes(
     item.quantity as typeof REMAINING_LEVELS[number],
   )
-    ? REMAINING_LEVELS
-    : [item.quantity, ...REMAINING_LEVELS] as readonly string[]
+  const [isCustom, setIsCustom] = useState(!isPresetQuantity)
+  const [draft, setDraft] = useState(isPresetQuantity ? "" : item.quantity)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const nextIsPreset = REMAINING_LEVELS.includes(
+      item.quantity as typeof REMAINING_LEVELS[number],
+    )
+    setIsCustom(!nextIsPreset)
+    setDraft(nextIsPreset || item.quantity === "-" ? "" : item.quantity)
+  }, [item.id, item.quantity])
+
+  useEffect(() => {
+    if (isCustom) inputRef.current?.focus()
+  }, [isCustom])
+
+  const commitCustomQuantity = () => {
+    const normalized = draft.trim()
+    if (!normalized) {
+      inputRef.current?.focus()
+      return
+    }
+
+    setDraft(normalized)
+    if (normalized !== item.quantity) onCommit(normalized)
+  }
 
   return (
-    <label
-      className="quantity-editor"
+    <div
+      className={"quantity-editor" + (isCustom ? " is-custom" : "")}
       onClick={(event) => event.stopPropagation()}
     >
-      <span className="sr-only">{item.name} 잔량</span>
       <select
-        aria-label={`${item.name} 잔량`}
-        onChange={(event) => onCommit(event.target.value)}
-        value={item.quantity}
+        aria-label={item.name + " 잔량"}
+        onChange={(event) => {
+          const nextValue = event.target.value
+          if (nextValue === CUSTOM_QUANTITY_VALUE) {
+            setDraft(isPresetQuantity ? "" : item.quantity)
+            setIsCustom(true)
+            return
+          }
+
+          setIsCustom(false)
+          setDraft("")
+          if (nextValue !== item.quantity) onCommit(nextValue)
+        }}
+        value={isCustom ? CUSTOM_QUANTITY_VALUE : item.quantity}
       >
-        {options.map((option) => (
+        {REMAINING_LEVELS.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
+        <option value={CUSTOM_QUANTITY_VALUE}>직접 입력</option>
       </select>
-    </label>
+      {isCustom && (
+        <div className="quantity-custom-input">
+          <label className="sr-only" htmlFor={"quantity-" + item.id}>
+            {item.name} 잔량 직접 입력
+          </label>
+          <input
+            id={"quantity-" + item.id}
+            maxLength={30}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === "Enter") {
+                event.preventDefault()
+                commitCustomQuantity()
+              }
+              if (event.key === "Escape") {
+                setDraft(isPresetQuantity ? "" : item.quantity)
+                if (isPresetQuantity) setIsCustom(false)
+              }
+            }}
+            placeholder="예: 30%"
+            ref={inputRef}
+            type="text"
+            value={draft}
+          />
+          <button
+            disabled={!draft.trim() || draft.trim() === item.quantity}
+            onClick={commitCustomQuantity}
+            type="button"
+          >
+            적용
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
