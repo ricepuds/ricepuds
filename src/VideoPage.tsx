@@ -1,7 +1,18 @@
+import { useState } from "react"
 import {
-  EQUIPMENT_VIDEOS,
-  type EquipmentVideo,
+  SCIENCE_VIDEOS,
+  VIDEO_CATEGORIES,
+  type ScienceVideo,
+  type VideoCategory,
 } from "./data/equipment-videos"
+
+const CATEGORY_SHORT_LABELS: Record<VideoCategory, string> = {
+  물리: "물",
+  화학: "화",
+  생명과학: "생",
+  지구과학: "지",
+  "기구 사용법": "기구",
+}
 
 function parseStartTime(value: string | null): number {
   if (!value) return 0
@@ -33,7 +44,7 @@ function getYoutubeDetails(youtubeUrl: string) {
   return { videoId, startAt }
 }
 
-function VideoCard({ video }: { video: EquipmentVideo }) {
+function VideoCard({ video }: { video: ScienceVideo }) {
   const { videoId, startAt } = getYoutubeDetails(video.youtubeUrl)
   const embedUrl =
     `https://www.youtube-nocookie.com/embed/${videoId}?start=${startAt}&rel=0`
@@ -63,26 +74,68 @@ function VideoCard({ video }: { video: EquipmentVideo }) {
 }
 
 export default function VideoPage() {
+  const [activeCategory, setActiveCategory] = useState<VideoCategory>(
+    SCIENCE_VIDEOS[0]?.category ?? VIDEO_CATEGORIES[0],
+  )
+  const visibleVideos = SCIENCE_VIDEOS.filter(
+    (video) => video.category === activeCategory,
+  )
+
   return (
     <main className="video-page" id="main-content">
       <header className="video-page-hero">
-        <p className="eyebrow">Equipment guide</p>
-        <h1>실험 기구 사용법</h1>
+        <p className="eyebrow">Science video library</p>
+        <h1>과학 영상 자료실</h1>
         <p>
-          실험 전에 영상을 확인하고, 기구의 올바른 사용 순서와 안전 수칙을
-          익혀 주세요.
+          물리·화학·생명과학·지구과학 수업 영상과 실험 기구 사용법을 분야별로
+          찾아보세요.
         </p>
       </header>
 
+      <nav className="video-category-tabs" aria-label="영상 분야">
+        {VIDEO_CATEGORIES.map((category) => {
+          const count = SCIENCE_VIDEOS.filter(
+            (video) => video.category === category,
+          ).length
+
+          return (
+            <button
+              aria-pressed={activeCategory === category}
+              className={activeCategory === category ? "is-active" : ""}
+              key={category}
+              onClick={() => setActiveCategory(category)}
+              type="button"
+            >
+              <span className="video-category-mark" aria-hidden="true">
+                {CATEGORY_SHORT_LABELS[category]}
+              </span>
+              <span>{category}</span>
+              <b>{count}</b>
+            </button>
+          )
+        })}
+      </nav>
+
       <div className="video-library-heading">
-        <h2>사용법 영상 모음</h2>
-        <span>총 {EQUIPMENT_VIDEOS.length}개</span>
+        <h2>{activeCategory}</h2>
+        <span>총 {visibleVideos.length}개</span>
       </div>
-      <section className="video-library" aria-label="실험 기구 사용법 영상 목록">
-        {EQUIPMENT_VIDEOS.map((video) => (
-          <VideoCard key={video.youtubeUrl} video={video} />
-        ))}
-      </section>
+      {visibleVideos.length ? (
+        <section
+          className="video-library"
+          aria-label={`${activeCategory} 영상 목록`}
+        >
+          {visibleVideos.map((video) => (
+            <VideoCard key={video.youtubeUrl} video={video} />
+          ))}
+        </section>
+      ) : (
+        <section className="video-empty-state" aria-live="polite">
+          <span aria-hidden="true">{CATEGORY_SHORT_LABELS[activeCategory]}</span>
+          <h2>{activeCategory} 영상 준비 중</h2>
+          <p>영상이 등록되면 이곳에 자동으로 표시됩니다.</p>
+        </section>
+      )}
     </main>
   )
 }
