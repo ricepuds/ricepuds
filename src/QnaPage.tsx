@@ -149,12 +149,12 @@ export default function QnaPage({
         <section className="questions-hero">
           <div>
             <p className="eyebrow">Ask &amp; answer</p>
-            <h1>과학 질문방</h1>
+            <h1>오송도손</h1>
             <p>
               모르는 내용은 편하게 묻고, 알고 있는 내용은 친절하게 답해 주세요.
             </p>
           </div>
-          <div className="questions-summary" aria-label="질문방 현황">
+          <div className="questions-summary" aria-label="오송도손 현황">
             <span>
               <strong>{questions.length.toLocaleString("ko-KR")}</strong>
               질문
@@ -229,13 +229,13 @@ export default function QnaPage({
             <div>
               <strong>
                 {loadError === "schema"
-                  ? "질문방 설정이 필요합니다"
+                  ? "오송도손 설정이 필요합니다"
                   : "연결을 확인해 주세요"}
               </strong>
               <p>
                 {loadError === "schema"
-                  ? "질문·답변 데이터베이스가 아직 준비되지 않았습니다. 관리자에게 문의해 주세요."
-                  : "질문방을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."}
+                  ? "오송도손의 질문·답변 데이터베이스가 아직 준비되지 않았습니다. 관리자에게 문의해 주세요."
+                  : "오송도손을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."}
               </p>
             </div>
             <button onClick={() => void loadQuestions()} type="button">

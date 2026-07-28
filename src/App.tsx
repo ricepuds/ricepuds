@@ -197,9 +197,9 @@ function Header({
       <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
         <button className="brand" onClick={onHome} type="button">
           <span className="brand-icon" aria-hidden="true">
-            오
+            S
           </span>
-          <strong>오송도손</strong>
+          <strong>오송고 과학실</strong>
         </button>
 
         <nav className="desktop-nav" aria-label="주요 메뉴">
@@ -225,7 +225,7 @@ function Header({
             onClick={onQuestions}
             type="button"
           >
-            질문방
+            오송도손
           </button>
           <button
             className={
@@ -301,9 +301,9 @@ function Header({
             <header>
               <div className="brand">
                 <span className="brand-icon" aria-hidden="true">
-                  오
+                  S
                 </span>
-                <strong>오송도손</strong>
+                <strong>오송고 과학실</strong>
               </div>
               <button
                 aria-label="닫기"
@@ -318,7 +318,7 @@ function Header({
                 ["NOW", onHome],
                 ["실험실", onSpaces],
                 ["공지", onAbout],
-                ["질문방", onQuestions],
+                ["오송도손", onQuestions],
                 ["분류표", onInventory],
                 ["예약", onReservation],
                 ...(user?.isAdmin ? [["관리자", onAdmin]] : []),
