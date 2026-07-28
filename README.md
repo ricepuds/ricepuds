@@ -1,6 +1,6 @@
-# 오송고 사이언스 랩크루
+# 오송도손
 
-오송고 과학실의 시약과 실험 기구를 검색하고, 과학실 예약과 공지사항을 관리하는 React 기반 통합 서비스입니다.
+오송도손의 시약과 실험 기구를 검색하고, 과학실 예약과 공지사항을 관리하는 React 기반 통합 서비스입니다.
 
 ## 주요 기능
 
@@ -31,5 +31,6 @@ pnpm build
 ## Supabase 설정
 
 예약, 공지, 예약 차단과 공유 잔량을 여러 기기에서 사용하려면 Supabase Dashboard의 SQL Editor에서 `supabase-schema.sql`을 한 번 실행해야 합니다.
+질문·답변 테이블만 추가하거나 질문방에서 `PGRST205` 오류가 표시되면 `supabase-qna-schema.sql`을 실행하세요.
 
 시약·기구 원본 정보는 공개 Google Sheets에서 읽고, 사용자가 수정한 잔량은 Supabase overlay로 안전하게 분리해 저장합니다.

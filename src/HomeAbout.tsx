@@ -102,9 +102,9 @@ export function HomePage({
           {source === "live" ? "Live inventory" : "Offline inventory"}
         </div>
         <h1>
-          오송고 과학실
+          오송도손
           <br />
-          <span>#사이언스 랩크루</span>
+          <span>#오송도손</span>
         </h1>
         <p>과학실의 시약과 실험 기구를 한곳에서 찾고 예약하세요.</p>
         <div className="hero-actions">
@@ -281,8 +281,8 @@ export function AboutPage({
         <section className="ios-card about-card">
           <div className="card-heading">
             <div>
-              <p className="eyebrow">Science Lab Crew</p>
-              <h2>사이언스 랩크루</h2>
+              <p className="eyebrow">Osong Doson</p>
+              <h2>오송도손</h2>
             </div>
           </div>
           <div className="crew-list">

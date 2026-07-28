@@ -15,6 +15,17 @@ interface QnaPageProps {
 const QUESTION_LIMIT = 500
 const ANSWER_LIMIT = 1000
 
+type QuestionLoadError = "" | "schema" | "request"
+
+function isMissingQuestionSchema(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "PGRST205"
+  )
+}
+
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -40,7 +51,7 @@ export default function QnaPage({
   const [questionDraft, setQuestionDraft] = useState("")
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState("")
+  const [loadError, setLoadError] = useState<QuestionLoadError>("")
   const [submittingQuestion, setSubmittingQuestion] = useState(false)
   const [submittingAnswer, setSubmittingAnswer] = useState<string | null>(null)
 
@@ -55,8 +66,8 @@ export default function QnaPage({
 
     try {
       setQuestions(await loadQuestionThreads())
-    } catch {
-      setLoadError("질문방을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    } catch (error) {
+      setLoadError(isMissingQuestionSchema(error) ? "schema" : "request")
     } finally {
       setLoading(false)
     }
@@ -181,7 +192,11 @@ export default function QnaPage({
                 </span>
                 <button
                   className="button primary"
-                  disabled={submittingQuestion || !questionDraft.trim()}
+                  disabled={
+                    submittingQuestion ||
+                    !questionDraft.trim() ||
+                    loadError === "schema"
+                  }
                   type="submit"
                 >
                   {submittingQuestion ? "등록 중…" : "질문 올리기"}
@@ -212,11 +227,19 @@ export default function QnaPage({
           <section className="questions-error" role="alert">
             <span aria-hidden="true">!</span>
             <div>
-              <strong>연결을 확인해 주세요</strong>
-              <p>{loadError}</p>
+              <strong>
+                {loadError === "schema"
+                  ? "질문방 설정이 필요합니다"
+                  : "연결을 확인해 주세요"}
+              </strong>
+              <p>
+                {loadError === "schema"
+                  ? "질문·답변 데이터베이스가 아직 준비되지 않았습니다. 관리자에게 문의해 주세요."
+                  : "질문방을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."}
+              </p>
             </div>
             <button onClick={() => void loadQuestions()} type="button">
-              다시 시도
+              {loadError === "schema" ? "다시 확인" : "다시 시도"}
             </button>
           </section>
         )}
