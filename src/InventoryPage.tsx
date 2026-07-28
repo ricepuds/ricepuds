@@ -137,17 +137,22 @@ function QuantityField({
   const [isCustom, setIsCustom] = useState(!isPresetQuantity)
   const [draft, setDraft] = useState(isPresetQuantity ? "" : item.quantity)
   const inputRef = useRef<HTMLInputElement>(null)
+  const shouldFocusCustomInputRef = useRef(false)
 
   useEffect(() => {
     const nextIsPreset = REMAINING_LEVELS.includes(
       item.quantity as typeof REMAINING_LEVELS[number],
     )
+    shouldFocusCustomInputRef.current = false
     setIsCustom(!nextIsPreset)
     setDraft(nextIsPreset || item.quantity === "-" ? "" : item.quantity)
   }, [item.id, item.quantity])
 
   useEffect(() => {
-    if (isCustom) inputRef.current?.focus()
+    if (!isCustom || !shouldFocusCustomInputRef.current) return
+
+    shouldFocusCustomInputRef.current = false
+    inputRef.current?.focus()
   }, [isCustom])
 
   const commitCustomQuantity = () => {
@@ -172,6 +177,8 @@ function QuantityField({
           const nextValue = event.target.value
           if (nextValue === CUSTOM_QUANTITY_VALUE) {
             setDraft(isPresetQuantity ? "" : item.quantity)
+            shouldFocusCustomInputRef.current = true
+
             setIsCustom(true)
             return
           }
