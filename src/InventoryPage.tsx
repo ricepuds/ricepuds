@@ -42,6 +42,8 @@ const REMAINING_LEVELS = [
   "수량미기록",
 ] as const
 const CUSTOM_QUANTITY_VALUE = "__custom_quantity__"
+const INITIAL_ROW_COUNT = 40
+const ROW_BATCH_SIZE = 40
 
 function getStatus(item: InventoryItem): InventoryStatus {
   if (item.toxic) return "toxic"
@@ -250,6 +252,11 @@ export default function InventoryPage({
   const [category, setCategory] = useState("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [sort, setSort] = useState<SortKey>("id")
+  const [renderWindow, setRenderWindow] = useState({
+    key: "",
+    count: INITIAL_ROW_COUNT,
+  })
+  const loadMoreRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     setQuery("")
@@ -294,6 +301,48 @@ export default function InventoryPage({
       })
       .sort((a, b) => compareItems(a, b, sort))
   }, [activeArea, areaItems, category, query, sort, status])
+
+  const renderKey = [activeArea, category, query, sort, status].join("\u0000")
+  const renderCount =
+    renderWindow.key === renderKey
+      ? renderWindow.count
+      : INITIAL_ROW_COUNT
+  const renderedItems = visibleItems.slice(0, renderCount)
+  const hasMore = renderedItems.length < visibleItems.length
+
+  useEffect(() => {
+    setRenderWindow({ key: renderKey, count: INITIAL_ROW_COUNT })
+  }, [renderKey])
+
+  const showMore = () => {
+    setRenderWindow((current) => {
+      const currentCount =
+        current.key === renderKey ? current.count : INITIAL_ROW_COUNT
+
+      return {
+        key: renderKey,
+        count: Math.min(
+          currentCount + ROW_BATCH_SIZE,
+          visibleItems.length,
+        ),
+      }
+    })
+  }
+
+  useEffect(() => {
+    const target = loadMoreRef.current
+    if (!target || !hasMore || !("IntersectionObserver" in window)) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) showMore()
+      },
+      { rootMargin: "700px 0px" },
+    )
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, renderKey, visibleItems.length])
 
   const reagentCount = items.filter((item) => item.type === "reagent").length
   const equipmentCount = items.length - reagentCount
@@ -510,6 +559,7 @@ export default function InventoryPage({
               className="inventory-list"
               role="table"
               aria-label="과학실 물품 목록"
+              aria-rowcount={visibleItems.length + 1}
             >
               <div className="inventory-row inventory-row-head" role="row">
                 <span>#</span>
@@ -521,7 +571,7 @@ export default function InventoryPage({
                 <span />
               </div>
 
-              {visibleItems.map((item, index) => {
+              {renderedItems.map((item, index) => {
                 const editable = isAdmin && !item.googleSheetManaged
                 const publicQuantityEditable = item.type === "reagent"
 
@@ -643,6 +693,18 @@ export default function InventoryPage({
                 )
               })}
             </div>
+
+            {hasMore && (
+              <button
+                className="inventory-load-more"
+                onClick={showMore}
+                ref={loadMoreRef}
+                type="button"
+              >
+                <strong>{renderedItems.length.toLocaleString("ko-KR")}</strong>
+                <span>/ {visibleItems.length.toLocaleString("ko-KR")}개 · 더 보기</span>
+              </button>
+            )}
 
             {!visibleItems.length && (
               <div className="empty-state">

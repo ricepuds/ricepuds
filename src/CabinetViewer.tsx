@@ -151,12 +151,49 @@ function getZoneLabel(model: StorageModel) {
   return "상단 수납장"
 }
 
-function getThree() {
+function getThree(): ThreeNamespace | undefined {
   if (typeof window === "undefined") {
     return undefined
   }
 
   return (window as Window & { THREE?: ThreeNamespace }).THREE
+}
+
+let threeRuntimePromise: Promise<ThreeNamespace> | null = null
+
+function loadThree(): Promise<ThreeNamespace> {
+  const existing = getThree()
+
+  if (existing) return Promise.resolve(existing)
+
+  if (!threeRuntimePromise) {
+    threeRuntimePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script")
+      script.src = import.meta.env.BASE_URL + "vendor/three.min.js"
+      script.async = true
+
+      const fail = (message: string) => {
+        script.remove()
+        threeRuntimePromise = null
+        reject(new Error(message))
+      }
+
+      script.onload = () => {
+        const loaded = getThree()
+        if (!loaded) {
+          fail("Three.js did not expose window.THREE")
+          return
+        }
+
+        resolve(loaded)
+      }
+
+      script.onerror = () => fail("Failed to load Three.js")
+      document.head.appendChild(script)
+    })
+  }
+
+  return threeRuntimePromise
 }
 
 function createCabinetViewer(
@@ -817,24 +854,43 @@ export default function CabinetViewer({ item }: CabinetViewerProps) {
   )
   const runtimeKey = `${item.area}\u0000${item.category}\u0000${item.id}\u0000${item.location}`
   const [failedRuntimeKey, setFailedRuntimeKey] = useState<string | null>(null)
-  const three = getThree()
+  const [three, setThree] = useState<ThreeNamespace | undefined>(() =>
+    getThree(),
+  )
   const useThree = Boolean(three) && failedRuntimeKey !== runtimeKey
 
   useEffect(() => {
-    const container = hostRef.current
-    const activeThree = getThree()
+    let cancelled = false
 
-    if (!container || !useThree || !activeThree) {
+    if (three || failedRuntimeKey === runtimeKey) return
+
+    void loadThree()
+      .then((runtime) => {
+        if (!cancelled) setThree(runtime)
+      })
+      .catch(() => {
+        if (!cancelled) setFailedRuntimeKey(runtimeKey)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [failedRuntimeKey, runtimeKey, three])
+
+  useEffect(() => {
+    const container = hostRef.current
+
+    if (!container || !useThree || !three) {
       return
     }
 
     try {
-      return createCabinetViewer(container, model, activeThree)
+      return createCabinetViewer(container, model, three)
     } catch {
       setFailedRuntimeKey(runtimeKey)
       return
     }
-  }, [model, runtimeKey, useThree])
+  }, [model, runtimeKey, three, useThree])
 
   const frameStyle: CSSProperties = {
     background:

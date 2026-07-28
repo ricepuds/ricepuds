@@ -1108,6 +1108,26 @@ button:disabled {
   box-shadow: var(--shadow-sm);
 }
 
+.inventory-load-more {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.inventory-load-more strong {
+  color: var(--blue);
+}
+
 .inventory-row {
   display: grid;
   grid-template-columns: 48px 112px minmax(160px, 1.35fr) minmax(130px, 1fr) 88px 54px 14px;

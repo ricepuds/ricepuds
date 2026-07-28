@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
   InventoryEdits,
   Notice,
@@ -7,8 +8,6 @@ import type {
   ReservationBlock,
   ReservationStatus,
 } from "./types"
-
-type SupabaseClient = any
 
 interface AuthSession {
   user?: {
@@ -32,7 +31,7 @@ const INVENTORY_EDITS_TABLE = "science_lab_inventory_edits"
 const QUESTIONS_TABLE = "science_lab_questions"
 const ANSWERS_TABLE = "science_lab_answers"
 
-let client: SupabaseClient | null | undefined
+let clientPromise: Promise<SupabaseClient> | null = null
 
 export function normalizeEmail(email: unknown): string {
   return String(email ?? "")
@@ -44,29 +43,29 @@ export function isAdminEmail(email: unknown): boolean {
   return ADMIN_EMAILS.includes(normalizeEmail(email))
 }
 
-export function getSupabaseClient(): SupabaseClient | null {
-  if (client) return client
-  if (!window.supabase?.createClient) return null
-
-  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  })
-
-  return client
-}
-
-function requiredClient(): SupabaseClient {
-  const supabase = getSupabaseClient()
-
-  if (!supabase) {
-    throw new Error("Supabase 연결을 불러오지 못했습니다.")
+export function getSupabaseClient(): Promise<SupabaseClient> {
+  if (!clientPromise) {
+    clientPromise = import("@supabase/supabase-js")
+      .then(({ createClient }) =>
+        createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: {
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: false,
+          },
+        }),
+      )
+      .catch((error) => {
+        clientPromise = null
+        throw error
+      })
   }
 
-  return supabase
+  return clientPromise
+}
+
+function requiredClient(): Promise<SupabaseClient> {
+  return getSupabaseClient()
 }
 
 function throwIfError(error: unknown): void {
@@ -74,10 +73,7 @@ function throwIfError(error: unknown): void {
 }
 
 export async function getCurrentSession(): Promise<AuthSession | null> {
-  const supabase = getSupabaseClient()
-
-  if (!supabase) return null
-
+  const supabase = await requiredClient()
   const { data, error } = await supabase.auth.getSession()
   throwIfError(error)
   return data?.session as AuthSession | null ?? null
@@ -86,19 +82,45 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
 export function subscribeToAuth(
   callback: (session: AuthSession | null) => void,
 ): () => void {
-  const supabase = getSupabaseClient()
+  let active = true
+  let unsubscribe: (() => void) | undefined
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let retryDelay = 1_000
 
-  if (!supabase) return () => undefined
+  const startSubscription = () => {
+    void getSupabaseClient()
+      .then((supabase) => {
+        if (!active) return
 
-  const { data } = supabase.auth.onAuthStateChange(
-    (_event: string, session: AuthSession | null) => callback(session),
-  )
+        const { data } = supabase.auth.onAuthStateChange(
+          (_event: string, session: AuthSession | null) => {
+            if (active) callback(session)
+          },
+        )
+        unsubscribe = () => data.subscription.unsubscribe()
+      })
+      .catch(() => {
+        if (!active) return
 
-  return () => data?.subscription?.unsubscribe()
+        retryTimer = setTimeout(startSubscription, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
+      })
+  }
+
+  startSubscription()
+
+  return () => {
+    active = false
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer)
+    }
+    unsubscribe?.()
+  }
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await requiredClient().auth.signInWithPassword({
+  const supabase = await requiredClient()
+  const { error } = await supabase.auth.signInWithPassword({
     email: normalizeEmail(email),
     password,
   })
@@ -110,7 +132,8 @@ export async function signUp(
   password: string,
 ): Promise<boolean> {
   const normalized = normalizeEmail(email)
-  const { data, error } = await requiredClient().auth.signUp({
+  const supabase = await requiredClient()
+  const { data, error } = await supabase.auth.signUp({
     email: normalized,
     password,
     options: { data: { name: normalized.split("@")[0] } },
@@ -120,8 +143,7 @@ export async function signUp(
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = getSupabaseClient()
-  if (!supabase) return
+  const supabase = await requiredClient()
   const { error } = await supabase.auth.signOut()
   throwIfError(error)
 }
@@ -162,7 +184,7 @@ export function getAuthErrorMessage(
 }
 
 export async function loadReservations(): Promise<Reservation[]> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(RESERVATIONS_TABLE)
     .select(
       "id, room, date, time, class_name, applicant_student_id, applicant_name, purpose, created_at, status, status_reason",
@@ -188,7 +210,7 @@ export async function loadReservations(): Promise<Reservation[]> {
 export async function createReservation(
   reservation: Reservation,
 ): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATIONS_TABLE)
     .insert({
       id: reservation.id,
@@ -211,7 +233,7 @@ export async function updateReservation(
   status: Exclude<ReservationStatus, "pending">,
   statusReason = "",
 ): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATIONS_TABLE)
     .update({
       status,
@@ -222,7 +244,7 @@ export async function updateReservation(
 }
 
 export async function removeReservation(id: string): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATIONS_TABLE)
     .delete()
     .eq("id", id)
@@ -230,7 +252,7 @@ export async function removeReservation(id: string): Promise<void> {
 }
 
 export async function removeAllReservations(): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATIONS_TABLE)
     .delete()
     .neq("id", "")
@@ -238,7 +260,7 @@ export async function removeAllReservations(): Promise<void> {
 }
 
 export async function loadReservationBlocks(): Promise<ReservationBlock[]> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(RESERVATION_BLOCKS_TABLE)
     .select("id, room, date, start_time, end_time, reason, created_at")
     .order("date", { ascending: true })
@@ -258,7 +280,7 @@ export async function loadReservationBlocks(): Promise<ReservationBlock[]> {
 export async function createReservationBlock(
   block: ReservationBlock,
 ): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATION_BLOCKS_TABLE)
     .insert({
       id: block.id,
@@ -273,7 +295,7 @@ export async function createReservationBlock(
 }
 
 export async function removeReservationBlock(id: string): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(RESERVATION_BLOCKS_TABLE)
     .delete()
     .eq("id", id)
@@ -281,7 +303,7 @@ export async function removeReservationBlock(id: string): Promise<void> {
 }
 
 export async function loadNotices(): Promise<Notice[]> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(NOTICES_TABLE)
     .select("id, content, created_at")
     .order("created_at_sort", { ascending: false })
@@ -295,7 +317,7 @@ export async function loadNotices(): Promise<Notice[]> {
 }
 
 export async function createNotice(notice: Notice): Promise<void> {
-  const { error } = await requiredClient().from(NOTICES_TABLE).insert({
+  const { error } = await (await requiredClient()).from(NOTICES_TABLE).insert({
     id: notice.id,
     content: notice.content,
     created_at: notice.createdAt,
@@ -304,7 +326,7 @@ export async function createNotice(notice: Notice): Promise<void> {
 }
 
 export async function removeNotice(id: string): Promise<void> {
-  const { error } = await requiredClient()
+  const { error } = await (await requiredClient())
     .from(NOTICES_TABLE)
     .delete()
     .eq("id", id)
@@ -332,7 +354,7 @@ function mapQuestion(row: any): QuestionPost {
 }
 
 export async function loadQuestionThreads(): Promise<QuestionPost[]> {
-  const supabase = requiredClient()
+  const supabase = await requiredClient()
   const [questionsResult, answersResult] = await Promise.all([
     supabase
       .from(QUESTIONS_TABLE)
@@ -365,7 +387,7 @@ export async function loadQuestionThreads(): Promise<QuestionPost[]> {
 }
 
 export async function createQuestion(content: string): Promise<QuestionPost> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(QUESTIONS_TABLE)
     .insert({ content: content.trim() })
     .select("id, content, author_name, created_at")
@@ -380,7 +402,7 @@ export async function createQuestionAnswer(
   questionId: string,
   content: string,
 ): Promise<QuestionAnswer> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(ANSWERS_TABLE)
     .insert({ question_id: questionId, content: content.trim() })
     .select("id, question_id, content, author_name, created_at")
@@ -392,7 +414,7 @@ export async function createQuestionAnswer(
 }
 
 export async function loadInventoryEdits(): Promise<InventoryEdits> {
-  const { data, error } = await requiredClient()
+  const { data, error } = await (await requiredClient())
     .from(INVENTORY_EDITS_TABLE)
     .select("item_id, field_name, field_value")
   throwIfError(error)
@@ -427,7 +449,7 @@ export async function saveInventoryEdit(
   fieldName: keyof InventoryEdits[string],
   fieldValue: string,
 ): Promise<void> {
-  const { error } = await requiredClient().from(INVENTORY_EDITS_TABLE).upsert(
+  const { error } = await (await requiredClient()).from(INVENTORY_EDITS_TABLE).upsert(
     {
       item_id: itemId,
       field_name: fieldName,
