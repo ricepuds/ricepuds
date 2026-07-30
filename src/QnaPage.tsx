@@ -181,7 +181,7 @@ export default function QnaPage({
                 id="new-question"
                 maxLength={QUESTION_LIMIT}
                 onChange={(event) => setQuestionDraft(event.target.value)}
-                placeholder="예: 산과 염기를 섞으면 왜 온도가 변하나요?"
+                placeholder="궁금한것을 물어보세요!"
                 rows={3}
                 value={questionDraft}
               />
