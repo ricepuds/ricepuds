@@ -77,12 +77,18 @@ export interface QuestionPost {
   id: string
   content: string
   authorName: string
+  isAnonymous: boolean
+  actualAuthorName?: string
+  authorEmail?: string
   createdAt: string
   answers: QuestionAnswer[]
 }
 
 export interface AuthUser {
+  id: string
   email: string
+  name: string
+  canChangeName: boolean
   isAdmin: boolean
 }
 

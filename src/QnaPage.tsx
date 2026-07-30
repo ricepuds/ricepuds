@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   createQuestion,
   createQuestionAnswer,
@@ -22,7 +22,9 @@ function isMissingQuestionSchema(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    (error as { code?: unknown }).code === "PGRST205"
+    ["42703", "PGRST202", "PGRST204", "PGRST205"].includes(
+      String((error as { code?: unknown }).code ?? ""),
+    )
   )
 }
 
@@ -49,11 +51,14 @@ export default function QnaPage({
 }: QnaPageProps) {
   const [questions, setQuestions] = useState<QuestionPost[]>([])
   const [questionDraft, setQuestionDraft] = useState("")
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<QuestionLoadError>("")
   const [submittingQuestion, setSubmittingQuestion] = useState(false)
   const [submittingAnswer, setSubmittingAnswer] = useState<string | null>(null)
+  const loadRequestRef = useRef(0)
+  const previousUserIdRef = useRef(user?.id)
 
   const answeredCount = useMemo(
     () => questions.filter((question) => question.answers.length > 0).length,
@@ -61,21 +66,39 @@ export default function QnaPage({
   )
 
   const loadQuestions = useCallback(async () => {
+    const requestId = ++loadRequestRef.current
     setLoading(true)
     setLoadError("")
 
     try {
-      setQuestions(await loadQuestionThreads())
+      const nextQuestions = await loadQuestionThreads(Boolean(user?.isAdmin))
+      if (loadRequestRef.current !== requestId) return
+      setQuestions(nextQuestions)
     } catch (error) {
+      if (loadRequestRef.current !== requestId) return
       setLoadError(isMissingQuestionSchema(error) ? "schema" : "request")
     } finally {
-      setLoading(false)
+      if (loadRequestRef.current === requestId) setLoading(false)
     }
-  }, [])
+  }, [user?.isAdmin])
 
   useEffect(() => {
     void loadQuestions()
+    return () => {
+      loadRequestRef.current += 1
+    }
   }, [loadQuestions])
+
+  useEffect(() => {
+    const previousUserId = previousUserIdRef.current
+    const nextUserId = user?.id
+    if (previousUserId && previousUserId !== nextUserId) {
+      setQuestionDraft("")
+      setIsAnonymous(false)
+      setAnswerDrafts({})
+    }
+    previousUserIdRef.current = nextUserId
+  }, [user?.id])
 
   const handleQuestionSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -94,9 +117,21 @@ export default function QnaPage({
 
     setSubmittingQuestion(true)
     try {
-      const created = await createQuestion(content)
-      setQuestions((current) => [created, ...current])
+      const created = await createQuestion(content, isAnonymous)
+      loadRequestRef.current += 1
+      setLoading(false)
+      setQuestions((current) => [
+        user.isAdmin && isAnonymous
+          ? {
+              ...created,
+              actualAuthorName: user.name,
+              authorEmail: user.email,
+            }
+          : created,
+        ...current,
+      ])
       setQuestionDraft("")
+      setIsAnonymous(false)
       onToast("질문을 등록했습니다.", "success")
     } catch {
       onToast("질문을 서버에 저장하지 못했습니다.", "error")
@@ -124,6 +159,8 @@ export default function QnaPage({
     setSubmittingAnswer(questionId)
     try {
       const created = await createQuestionAnswer(questionId, content)
+      loadRequestRef.current += 1
+      setLoading(false)
       setQuestions((current) =>
         current.map((question) =>
           question.id === questionId
@@ -186,10 +223,32 @@ export default function QnaPage({
                 value={questionDraft}
               />
               <footer>
-                <span>
-                  {questionDraft.length.toLocaleString("ko-KR")} /{" "}
-                  {QUESTION_LIMIT.toLocaleString("ko-KR")}
-                </span>
+                <div className="question-composer-meta">
+                  <div className="question-anonymous-option">
+                    <button
+                      aria-describedby="anonymous-question-note"
+                      aria-pressed={isAnonymous}
+                      className={`question-anonymous-toggle${
+                        isAnonymous ? " is-active" : ""
+                      }`}
+                      disabled={submittingQuestion}
+                      onClick={() => setIsAnonymous((current) => !current)}
+                      type="button"
+                    >
+                      <span aria-hidden="true">
+                        <i />
+                      </span>
+                      익명으로 질문
+                    </button>
+                    <small id="anonymous-question-note">
+                      다른 사용자에게 익명이며 관리자는 작성자를 확인할 수 있어요.
+                    </small>
+                  </div>
+                  <span>
+                    {questionDraft.length.toLocaleString("ko-KR")} /{" "}
+                    {QUESTION_LIMIT.toLocaleString("ko-KR")}
+                  </span>
+                </div>
                 <button
                   className="button primary"
                   disabled={
@@ -260,15 +319,35 @@ export default function QnaPage({
           ) : questions.length ? (
             questions.map((question) => {
               const answerDraft = answerDrafts[question.id] ?? ""
+              const publicAuthorName = question.isAnonymous
+                ? "익명"
+                : question.authorName
 
               return (
                 <article className="question-thread" key={question.id}>
                   <header className="question-thread-header">
                     <span className="question-avatar" aria-hidden="true">
-                      {avatarLabel(question.authorName)}
+                      {avatarLabel(publicAuthorName)}
                     </span>
                     <div>
-                      <strong>{question.authorName}</strong>
+                      <strong>
+                        {publicAuthorName}
+                        {question.isAnonymous && (
+                          <span className="question-anonymous-badge">
+                            익명 질문
+                          </span>
+                        )}
+                      </strong>
+                      {user?.isAdmin &&
+                        question.isAnonymous &&
+                        question.actualAuthorName && (
+                          <span className="question-admin-author">
+                            관리자 확인 · {question.actualAuthorName}
+                            {question.authorEmail
+                              ? ` (${question.authorEmail})`
+                              : ""}
+                          </span>
+                        )}
                       <time dateTime={question.createdAt}>
                         {formatDate(question.createdAt)}
                       </time>

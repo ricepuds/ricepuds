@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
+  AuthUser,
   InventoryEdits,
   Notice,
   QuestionAnswer,
@@ -9,10 +10,21 @@ import type {
   ReservationStatus,
 } from "./types"
 
-interface AuthSession {
+export interface AuthSession {
   user?: {
+    id?: string
     email?: string
+    user_metadata?: Record<string, unknown>
   }
+}
+
+interface UserProfile {
+  name: string
+  canChangeName: boolean
+}
+
+export interface SignInResult {
+  nameWasSet: boolean
 }
 
 const SUPABASE_URL = "https://exgbktkirqnqyjvbwupp.supabase.co"
@@ -28,8 +40,11 @@ const RESERVATIONS_TABLE = "science_lab_reservations"
 const RESERVATION_BLOCKS_TABLE = "science_lab_reservation_blocks"
 const NOTICES_TABLE = "science_lab_notices"
 const INVENTORY_EDITS_TABLE = "science_lab_inventory_edits"
+const PROFILES_TABLE = "science_lab_profiles"
 const QUESTIONS_TABLE = "science_lab_questions"
 const ANSWERS_TABLE = "science_lab_answers"
+const SET_PROFILE_NAME_RPC = "set_my_science_lab_name"
+const QUESTION_AUTHORS_RPC = "get_science_lab_question_authors"
 
 let clientPromise: Promise<SupabaseClient> | null = null
 
@@ -41,6 +56,40 @@ export function normalizeEmail(email: unknown): string {
 
 export function isAdminEmail(email: unknown): boolean {
   return ADMIN_EMAILS.includes(normalizeEmail(email))
+}
+
+export function normalizeDisplayName(name: unknown): string {
+  return String(name ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+function metadataName(session: AuthSession | null): string {
+  const name = normalizeDisplayName(session?.user?.user_metadata?.name)
+  if (name) return name.slice(0, 40)
+  const email = normalizeEmail(session?.user?.email)
+  return (email.split("@")[0] || "사용자").slice(0, 40)
+}
+
+function namesMatch(left: string, right: string): boolean {
+  return (
+    normalizeDisplayName(left).toLocaleLowerCase("ko-KR") ===
+    normalizeDisplayName(right).toLocaleLowerCase("ko-KR")
+  )
+}
+
+function isMissingDatabaseObject(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = "code" in error ? String(error.code ?? "") : ""
+  const message =
+    "message" in error ? String(error.message ?? "").toLowerCase() : ""
+  return (
+    ["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(
+      code,
+    ) ||
+    message.includes("schema cache") ||
+    message.includes("could not find the function")
+  )
 }
 
 export function getSupabaseClient(): Promise<SupabaseClient> {
@@ -118,25 +167,146 @@ export function subscribeToAuth(
   }
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+async function loadCurrentProfile(
+  supabase?: SupabaseClient,
+): Promise<UserProfile | null> {
+  const client = supabase ?? (await requiredClient())
+  const { data, error } = await client
+    .from(PROFILES_TABLE)
+    .select("display_name, name_change_available")
+    .maybeSingle()
+  if (error) {
+    if (isMissingDatabaseObject(error)) return null
+    throw error
+  }
+  if (!data) return null
+  const row = data as {
+    display_name?: unknown
+    name_change_available?: unknown
+  }
+  return {
+    name: normalizeDisplayName(row.display_name) || "사용자",
+    canChangeName: Boolean(row.name_change_available),
+  }
+}
+
+export async function resolveAuthUser(
+  session: AuthSession | null,
+): Promise<AuthUser | null> {
+  const id = String(session?.user?.id ?? "")
+  const email = normalizeEmail(session?.user?.email)
+  if (!id || !email) return null
+  let profile: UserProfile | null = null
+  try {
+    profile = await loadCurrentProfile()
+  } catch {
+    // Session metadata keeps the account usable during a temporary profile outage.
+  }
+  return {
+    id,
+    email,
+    name: profile?.name ?? metadataName(session),
+    canChangeName:
+      profile?.canChangeName ??
+      session?.user?.user_metadata?.profile_name_set !== true,
+    isAdmin: isAdminEmail(email),
+  }
+}
+
+export async function updateDisplayName(name: string): Promise<UserProfile> {
+  const displayName = normalizeDisplayName(name)
+  if (!displayName || displayName.length > 40) {
+    throw new Error("이름은 1자 이상 40자 이하로 입력해 주세요.")
+  }
+
   const supabase = await requiredClient()
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase
+    .rpc(SET_PROFILE_NAME_RPC, { new_display_name: displayName })
+    .single()
+  throwIfError(error)
+  if (!data) throw new Error("이름 변경 결과를 불러오지 못했습니다.")
+  // The profile update is already committed by the RPC. Session metadata is
+  // only a compatibility fallback, so a refresh failure must not turn this
+  // successful one-time change into a misleading error.
+  try {
+    await supabase.auth.refreshSession()
+  } catch {
+    // The fresh profile is returned below even if session refresh is offline.
+  }
+  const row = data as {
+    display_name?: unknown
+    name_change_available?: unknown
+  }
+  return {
+    name: normalizeDisplayName(row.display_name) || displayName,
+    canChangeName: Boolean(row.name_change_available),
+  }
+}
+
+export async function signIn(
+  email: string,
+  password: string,
+  name: string,
+): Promise<SignInResult> {
+  const displayName = normalizeDisplayName(name)
+  if (!displayName || displayName.length > 40) {
+    throw new Error("이름은 1자 이상 40자 이하로 입력해 주세요.")
+  }
+  const supabase = await requiredClient()
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: normalizeEmail(email),
     password,
   })
   throwIfError(error)
+  const session = data?.session as AuthSession | null ?? null
+  try {
+    const profile = await loadCurrentProfile(supabase)
+    if (profile?.canChangeName) {
+      await updateDisplayName(displayName)
+      return { nameWasSet: true }
+    }
+    if (profile && !namesMatch(profile.name, displayName)) {
+      throw new Error("입력한 이름이 계정에 등록된 이름과 일치하지 않습니다.")
+    }
+    if (!profile) {
+      const nameWasAlreadySet =
+        session?.user?.user_metadata?.profile_name_set === true
+      if (
+        nameWasAlreadySet &&
+        !namesMatch(metadataName(session), displayName)
+      ) {
+        throw new Error("입력한 이름이 계정에 등록된 이름과 일치하지 않습니다.")
+      }
+      if (!nameWasAlreadySet) {
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: { name: displayName, profile_name_set: true },
+        })
+        throwIfError(updateError)
+        return { nameWasSet: true }
+      }
+    }
+    return { nameWasSet: false }
+  } catch (profileError) {
+    await supabase.auth.signOut()
+    throw profileError
+  }
 }
 
 export async function signUp(
   email: string,
   password: string,
+  name: string,
 ): Promise<boolean> {
   const normalized = normalizeEmail(email)
+  const displayName = normalizeDisplayName(name)
+  if (!displayName || displayName.length > 40) {
+    throw new Error("이름은 1자 이상 40자 이하로 입력해 주세요.")
+  }
   const supabase = await requiredClient()
   const { data, error } = await supabase.auth.signUp({
     email: normalized,
     password,
-    options: { data: { name: normalized.split("@")[0] } },
+    options: { data: { name: displayName, profile_name_set: true } },
   })
   throwIfError(error)
   return Boolean(data?.session)
@@ -348,26 +518,49 @@ function mapQuestion(row: any): QuestionPost {
     id: String(row.id),
     content: String(row.content ?? ""),
     authorName: String(row.author_name ?? "사용자"),
+    isAnonymous: Boolean(row.is_anonymous),
     createdAt: String(row.created_at ?? ""),
     answers: [],
   }
 }
-
-export async function loadQuestionThreads(): Promise<QuestionPost[]> {
+export async function loadQuestionThreads(
+  includePrivateAuthors = false,
+): Promise<QuestionPost[]> {
   const supabase = await requiredClient()
-  const [questionsResult, answersResult] = await Promise.all([
+  const [initialQuestionsResult, answersResult] = await Promise.all([
     supabase
       .from(QUESTIONS_TABLE)
-      .select("id, content, author_name, created_at")
+      .select("id, content, author_name, is_anonymous, created_at")
       .order("created_at", { ascending: false }),
     supabase
       .from(ANSWERS_TABLE)
       .select("id, question_id, content, author_name, created_at")
       .order("created_at", { ascending: true }),
   ])
+  let questionRows: any[] = initialQuestionsResult.data ?? []
+  let questionError: unknown = initialQuestionsResult.error
+  if (questionError && isMissingDatabaseObject(questionError)) {
+    const fallbackResult = await supabase
+      .from(QUESTIONS_TABLE)
+      .select("id, content, author_name, created_at")
+      .order("created_at", { ascending: false })
+    questionRows = fallbackResult.data ?? []
+    questionError = fallbackResult.error
+  }
+  throwIfError(questionError)
 
-  throwIfError(questionsResult.error)
   throwIfError(answersResult.error)
+  const privateAuthors = new Map<string, { name: string; email: string }>()
+  if (includePrivateAuthors) {
+    const { data, error } = await supabase.rpc(QUESTION_AUTHORS_RPC)
+    if (error && !isMissingDatabaseObject(error)) throw error
+    for (const row of data ?? []) {
+      privateAuthors.set(String(row.question_id), {
+        name: normalizeDisplayName(row.author_name) || "사용자",
+        email: normalizeEmail(row.author_email),
+      })
+    }
+  }
 
   const answersByQuestion = new Map<string, QuestionAnswer[]>()
   for (const row of answersResult.data ?? []) {
@@ -377,25 +570,43 @@ export async function loadQuestionThreads(): Promise<QuestionPost[]> {
     answersByQuestion.set(answer.questionId, current)
   }
 
-  return (questionsResult.data ?? []).map((row: any) => {
+  return questionRows.map((row: any) => {
     const question = mapQuestion(row)
+    const privateAuthor = privateAuthors.get(question.id)
     return {
       ...question,
+      actualAuthorName: privateAuthor?.name,
+      authorEmail: privateAuthor?.email,
       answers: answersByQuestion.get(question.id) ?? [],
     }
   })
 }
 
-export async function createQuestion(content: string): Promise<QuestionPost> {
-  const { data, error } = await (await requiredClient())
-    .from(QUESTIONS_TABLE)
-    .insert({ content: content.trim() })
-    .select("id, content, author_name, created_at")
-    .single()
+export async function createQuestion(
+  content: string,
+  isAnonymous = false,
+): Promise<QuestionPost> {
+  const supabase = await requiredClient()
+  const initialResult = await supabase
 
-  throwIfError(error)
-  if (!data) throw new Error("질문 저장 결과를 불러오지 못했습니다.")
-  return mapQuestion(data)
+    .from(QUESTIONS_TABLE)
+    .insert({ content: content.trim(), is_anonymous: isAnonymous })
+    .select("id, content, author_name, is_anonymous, created_at")
+    .single()
+  let questionData: any = initialResult.data
+  let questionError: unknown = initialResult.error
+  if (questionError && isMissingDatabaseObject(questionError) && !isAnonymous) {
+    const fallbackResult = await supabase
+      .from(QUESTIONS_TABLE)
+      .insert({ content: content.trim() })
+      .select("id, content, author_name, created_at")
+      .single()
+    questionData = fallbackResult.data
+    questionError = fallbackResult.error
+  }
+  throwIfError(questionError)
+  if (!questionData) throw new Error("질문 저장 결과를 불러오지 못했습니다.")
+  return mapQuestion(questionData)
 }
 
 export async function createQuestionAnswer(

@@ -20,19 +20,19 @@ import {
   createReservation,
   createReservationBlock,
   getCurrentSession,
-  isAdminEmail,
   loadInventoryEdits,
   loadNotices,
   loadReservationBlocks,
   loadReservations,
-  normalizeEmail,
   removeAllReservations,
   removeNotice,
   removeReservation,
   removeReservationBlock,
   saveInventoryEdit,
+  resolveAuthUser,
   subscribeToAuth,
   updateReservation,
+  type AuthSession,
 } from "./supabase"
 import type {
   Area,
@@ -269,7 +269,7 @@ function Header({
               onClick={onAccount}
               type="button"
             >
-              <span>{user.email.slice(0, 1).toUpperCase()}</span>
+              <span>{user.name.slice(0, 1).toUpperCase()}</span>
               <b>내 계정</b>
             </button>
           ) : (
@@ -537,11 +537,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-
-    const applySession = (session: { user?: { email?: string } } | null) => {
-      if (cancelled) return
-      const email = normalizeEmail(session?.user?.email)
-      setUser(email ? { email, isAdmin: isAdminEmail(email) } : null)
+    let requestId = 0
+    const applySession = (session: AuthSession | null) => {
+      const currentRequest = ++requestId
+      void resolveAuthUser(session)
+        .then((nextUser) => {
+          if (!cancelled && currentRequest === requestId) setUser(nextUser)
+        })
+        .catch(() => {
+          if (!cancelled && currentRequest === requestId) setUser(null)
+        })
     }
 
     void getCurrentSession()
@@ -1064,6 +1069,11 @@ export default function App() {
             setModal(null)
             navigate("admin", "전체")
           }}
+          onProfileUpdated={(name) =>
+            setUser((current) =>
+              current ? { ...current, name, canChangeName: false } : current,
+            )
+          }
           onToast={showToast}
           user={user}
         />

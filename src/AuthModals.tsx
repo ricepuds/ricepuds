@@ -7,7 +7,14 @@ import {
   type InvalidEvent,
   type MouseEvent,
 } from "react"
-import { getAuthErrorMessage, signIn, signOut, signUp } from "./supabase"
+import {
+  getAuthErrorMessage,
+  normalizeDisplayName,
+  signIn,
+  signOut,
+  signUp,
+  updateDisplayName,
+} from "./supabase"
 import type { AuthUser } from "./types"
 
 type ToastTone = "default" | "success" | "error"
@@ -29,6 +36,7 @@ export interface AccountModalProps {
   }
   onClose(): void
   onOpenAdmin(): void
+  onProfileUpdated(name: string): void
   onToast: ToastHandler
 }
 
@@ -119,8 +127,8 @@ function useDialogAccessibility(onClose: () => void) {
   return dialogRef
 }
 
-function getAvatarLabel(email: string) {
-  return email.trim().charAt(0).toUpperCase() || "?"
+function getAvatarLabel(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "?"
 }
 
 function handleBackdropMouseDown(
@@ -134,8 +142,10 @@ function handleBackdropMouseDown(
 
 export function AuthModal({ onClose, onToast }: AuthModalProps) {
   const [mode, setMode] = useState<AuthMode>("login")
+  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordConfirmation, setPasswordConfirmation] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
   const [loading, setLoading] = useState(false)
   const dialogRef = useDialogAccessibility(onClose)
@@ -151,7 +161,17 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
     }
 
     setMode(nextMode)
+    setPasswordConfirmation("")
     setErrorMessage("")
+  }
+
+  const handleNameInvalid = (event: InvalidEvent<HTMLInputElement>) => {
+    event.preventDefault()
+    setErrorMessage(
+      event.currentTarget.validity.valueMissing
+        ? "이름을 입력해 주세요."
+        : "이름은 40자 이하로 입력해 주세요.",
+    )
   }
 
   const handleEmailInvalid = (event: InvalidEvent<HTMLInputElement>) => {
@@ -179,20 +199,37 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
       return
     }
 
-    setLoading(true)
     setErrorMessage("")
+    const displayName = normalizeDisplayName(name)
+
+    if (!displayName || displayName.length > 40) {
+      setErrorMessage("이름은 1자 이상 40자 이하로 입력해 주세요.")
+      return
+    }
+
+    if (mode === "signup" && password !== passwordConfirmation) {
+      setErrorMessage("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
+      return
+    }
+
+    setLoading(true)
     let keepOpen = true
 
     try {
       if (mode === "login") {
-        await signIn(email, password)
-        onToast("로그인했습니다.", "success")
+        const result = await signIn(email, password, displayName)
+        onToast(
+          result.nameWasSet
+            ? "로그인하고 이름을 설정했습니다."
+            : "로그인했습니다.",
+          "success",
+        )
         keepOpen = false
         onClose()
         return
       }
 
-      const hasSession = await signUp(email, password)
+      const hasSession = await signUp(email, password, displayName)
 
       if (hasSession) {
         onToast("회원가입과 로그인이 완료되었습니다.", "success")
@@ -207,6 +244,7 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
       )
       setMode("login")
       setPassword("")
+      setPasswordConfirmation("")
     } catch (error) {
       const message = getAuthErrorMessage(error, mode)
       setErrorMessage(message)
@@ -286,10 +324,28 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
           role="tabpanel"
         >
           <label className="form-field">
+            <span>이름</span>
+            <input
+              autoComplete="name"
+              data-dialog-autofocus
+              disabled={loading}
+              maxLength={40}
+              onChange={(event) => {
+                setName(event.target.value)
+                setErrorMessage("")
+              }}
+              onInvalid={handleNameInvalid}
+              placeholder="사용할 이름을 입력해 주세요"
+              required
+              type="text"
+              value={name}
+            />
+          </label>
+
+          <label className="form-field">
             <span>이메일</span>
             <input
               autoComplete="email"
-              data-dialog-autofocus
               disabled={loading}
               inputMode="email"
               onChange={(event) => {
@@ -324,6 +380,26 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
             />
           </label>
 
+          {mode === "signup" && (
+            <label className="form-field">
+              <span>비밀번호 확인</span>
+              <input
+                autoComplete="new-password"
+                disabled={loading}
+                minLength={6}
+                onChange={(event) => {
+                  setPasswordConfirmation(event.target.value)
+                  setErrorMessage("")
+                }}
+                onInvalid={handlePasswordInvalid}
+                placeholder="비밀번호를 한 번 더 입력해 주세요"
+                required
+                type="password"
+                value={passwordConfirmation}
+              />
+            </label>
+          )}
+
           <p
             aria-live="assertive"
             className={`error-msg auth-error${
@@ -336,8 +412,8 @@ export function AuthModal({ onClose, onToast }: AuthModalProps) {
 
           <p className="auth-helper">
             {mode === "login"
-              ? "가입한 이메일과 비밀번호로 로그인합니다."
-              : "가입 후 이메일 인증이 필요한 경우 안내 메시지를 확인해 주세요."}
+              ? "기존 계정은 첫 로그인 때 입력한 이름으로 한 번만 이름을 정할 수 있습니다."
+              : "이 이름은 질문과 답변의 작성자명으로 표시됩니다."}
           </p>
 
           <div className="modal-actions">
@@ -369,9 +445,12 @@ export function AccountModal({
   inventorySummary,
   onClose,
   onOpenAdmin,
+  onProfileUpdated,
   onToast,
 }: AccountModalProps) {
   const [loading, setLoading] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(user.name)
   const [errorMessage, setErrorMessage] = useState("")
   const dialogRef = useDialogAccessibility(onClose)
   const titleId = useId()
@@ -382,6 +461,35 @@ export function AccountModal({
     { label: "기구", value: inventorySummary.equipment },
     { label: "주의 항목", value: inventorySummary.alerts },
   ]
+
+  const handleNameUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (loading || savingName || !user.canChangeName) return
+
+    const displayName = normalizeDisplayName(nameDraft)
+    if (!displayName || displayName.length > 40) {
+      setErrorMessage("이름은 1자 이상 40자 이하로 입력해 주세요.")
+      return
+    }
+
+    setSavingName(true)
+    setErrorMessage("")
+    try {
+      const profile = await updateDisplayName(displayName)
+      setNameDraft(profile.name)
+      onProfileUpdated(profile.name)
+      onToast(
+        "이름을 변경했습니다. 이 이름은 다시 변경할 수 없습니다.",
+        "success",
+      )
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "login")
+      setErrorMessage(message)
+      onToast(message, "error")
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const handleLogout = async () => {
     if (loading) {
@@ -418,7 +526,7 @@ export function AccountModal({
       onMouseDown={(event) => handleBackdropMouseDown(event, onClose)}
     >
       <section
-        aria-busy={loading}
+        aria-busy={loading || savingName}
         aria-describedby={subtitleId}
         aria-labelledby={titleId}
         aria-modal="true"
@@ -450,10 +558,11 @@ export function AccountModal({
             aria-hidden="true"
             className="account-avatar account-avatar-large"
           >
-            {getAvatarLabel(user.email)}
+            {getAvatarLabel(user.name)}
           </span>
           <div className="account-profile-copy">
-            <strong>{user.email}</strong>
+            <strong>{user.name}</strong>
+            <span className="account-email">{user.email}</span>
             <span className={`account-role${user.isAdmin ? " is-admin" : ""}`}>
               {user.isAdmin ? "관리자" : "일반 사용자"}
             </span>
@@ -469,12 +578,51 @@ export function AccountModal({
             </dd>
           </div>
           <div className="account-detail-row">
+            <dt>표시 이름</dt>
+            <dd>{user.name}</dd>
+          </div>
+          <div className="account-detail-row">
             <dt>이용 권한</dt>
             <dd>
               {user.isAdmin ? "재고·예약·공지 관리" : "재고 열람·예약 신청"}
             </dd>
           </div>
         </dl>
+
+        {user.canChangeName && (
+          <form className="account-name-editor" onSubmit={handleNameUpdate}>
+            <div>
+              <strong>이름을 한 번 변경할 수 있어요</strong>
+              <span>기존 계정에 제공되는 1회 변경 기회입니다.</span>
+            </div>
+            <label className="form-field">
+              <span>새 이름</span>
+              <input
+                autoComplete="name"
+                disabled={loading || savingName}
+                maxLength={40}
+                onChange={(event) => {
+                  setNameDraft(event.target.value)
+                  setErrorMessage("")
+                }}
+                placeholder="새 이름을 입력해 주세요"
+                required
+                type="text"
+                value={nameDraft}
+              />
+            </label>
+            <button
+              className="button primary"
+              disabled={loading || savingName}
+              type="submit"
+            >
+              {savingName && (
+                <span aria-hidden="true" className="button-spinner" />
+              )}
+              {savingName ? "변경 중…" : "이 이름으로 확정"}
+            </button>
+          </form>
+        )}
 
         {user.isAdmin && (
           <section
@@ -500,7 +648,7 @@ export function AccountModal({
 
             <button
               className="button secondary account-admin-open"
-              disabled={loading}
+              disabled={loading || savingName}
               onClick={onOpenAdmin}
               type="button"
             >
@@ -522,7 +670,7 @@ export function AccountModal({
         <div className="modal-actions modal-actions-split">
           <button
             className="button secondary"
-            disabled={loading}
+            disabled={loading || savingName}
             onClick={onClose}
             type="button"
           >
@@ -530,7 +678,7 @@ export function AccountModal({
           </button>
           <button
             className="button danger account-logout"
-            disabled={loading}
+            disabled={loading || savingName}
             onClick={handleLogout}
             type="button"
           >
