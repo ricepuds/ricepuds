@@ -87,6 +87,83 @@ create table if not exists public.science_lab_answers (
   created_at timestamptz not null default now()
 );
 
+-- 지정된 계정 이름을 프로필, 인증 메타데이터, 기존 공개 작성자명에 동기화합니다.
+do $$
+declare
+  desired record;
+  target_user_id uuid;
+  target_created_at timestamptz;
+begin
+  for desired in
+    select *
+      from (values
+        ('stst5192@naver.com'::text, '김형민'::text),
+        ('2min095156@gmail.com'::text, '윤슬기'::text)
+      ) as names(email, display_name)
+  loop
+    select users.id, users.created_at
+      into target_user_id, target_created_at
+      from auth.users as users
+     where lower(btrim(coalesce(users.email, ''))) = desired.email
+     limit 1;
+
+    if not found then
+      raise warning 'Science Lab account not found: %', desired.email;
+      continue;
+    end if;
+
+    insert into public.science_lab_profiles as profile (
+      user_id,
+      display_name,
+      name_change_available,
+      created_at,
+      updated_at
+    ) values (
+      target_user_id,
+      desired.display_name,
+      false,
+      target_created_at,
+      now()
+    )
+    on conflict (user_id) do update
+      set display_name = excluded.display_name,
+          name_change_available = false,
+          updated_at = now()
+    where profile.display_name is distinct from excluded.display_name
+       or profile.name_change_available is distinct from false;
+
+    update auth.users as users
+       set raw_user_meta_data = jsonb_set(
+         jsonb_set(
+           coalesce(users.raw_user_meta_data, '{}'::jsonb),
+           '{name}',
+           to_jsonb(desired.display_name::text),
+           true
+         ),
+         '{profile_name_set}',
+         'true'::jsonb,
+         true
+       )
+     where users.id = target_user_id
+       and (
+         users.raw_user_meta_data ->> 'name' is distinct from desired.display_name
+         or lower(coalesce(users.raw_user_meta_data ->> 'profile_name_set', 'false')) <> 'true'
+       );
+
+    update public.science_lab_questions as question
+       set author_name = desired.display_name
+     where question.author_id = target_user_id
+       and not question.is_anonymous
+       and question.author_name is distinct from desired.display_name;
+
+    update public.science_lab_answers as answer
+       set author_name = desired.display_name
+     where answer.author_id = target_user_id
+       and answer.author_name is distinct from desired.display_name;
+  end loop;
+end;
+$$;
+
 create or replace function public.set_science_lab_question_author()
 returns trigger
 language plpgsql
