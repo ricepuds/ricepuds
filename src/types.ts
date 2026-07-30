@@ -78,6 +78,7 @@ export interface QuestionPost {
   content: string
   authorName: string
   isAnonymous: boolean
+  imageUrls: string[]
   actualAuthorName?: string
   authorEmail?: string
   createdAt: string

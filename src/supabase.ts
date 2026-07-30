@@ -10,6 +10,10 @@ import type {
   ReservationBlock,
   ReservationStatus,
 } from "./types"
+import {
+  QUESTION_IMAGE_MAX_COUNT,
+  validateQuestionImageFile,
+} from "./questionImages"
 
 export interface AuthSession {
   user?: {
@@ -45,9 +49,20 @@ const INVENTORY_EDITS_TABLE = "science_lab_inventory_edits"
 const PROFILES_TABLE = "science_lab_profiles"
 const QUESTIONS_TABLE = "science_lab_questions"
 const ANSWERS_TABLE = "science_lab_answers"
+const QUESTION_IMAGE_BUCKET = "science-lab-question-images"
 const SET_PROFILE_NAME_RPC = "set_my_science_lab_name"
 const QUESTION_AUTHORS_RPC = "get_science_lab_question_authors"
 const ACCOUNT_LIST_RPC = "get_science_lab_accounts"
+const RESERVE_QUESTION_IMAGES_RPC = "reserve_science_lab_question_images"
+const CANCEL_QUESTION_IMAGES_RPC = "cancel_science_lab_question_images"
+
+const QUESTION_IMAGE_EXTENSION_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+}
+const QUESTION_IMAGE_PATH_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp)$/
 
 let clientPromise: Promise<SupabaseClient> | null = null
 
@@ -539,16 +554,28 @@ function mapQuestionAnswer(row: any): QuestionAnswer {
   }
 }
 
+function questionImagePublicUrl(path: unknown): string {
+  const normalizedPath = String(path ?? "").trim().toLowerCase()
+  if (!QUESTION_IMAGE_PATH_PATTERN.test(normalizedPath)) return ""
+  return `${SUPABASE_URL}/storage/v1/object/public/${QUESTION_IMAGE_BUCKET}/${encodeURIComponent(normalizedPath)}`
+}
+
 function mapQuestion(row: any): QuestionPost {
+  const imageUrls = (Array.isArray(row.image_paths) ? row.image_paths : [])
+    .map(questionImagePublicUrl)
+    .filter((url: string) => Boolean(url))
+
   return {
     id: String(row.id),
     content: String(row.content ?? ""),
     authorName: String(row.author_name ?? "사용자"),
     isAnonymous: Boolean(row.is_anonymous),
+    imageUrls,
     createdAt: String(row.created_at ?? ""),
     answers: [],
   }
 }
+
 export async function loadQuestionThreads(
   includePrivateAuthors = false,
 ): Promise<QuestionPost[]> {
@@ -556,7 +583,9 @@ export async function loadQuestionThreads(
   const [initialQuestionsResult, answersResult] = await Promise.all([
     supabase
       .from(QUESTIONS_TABLE)
-      .select("id, content, author_name, is_anonymous, created_at")
+      .select(
+        "id, content, author_name, is_anonymous, image_paths, created_at",
+      )
       .order("created_at", { ascending: false }),
     supabase
       .from(ANSWERS_TABLE)
@@ -566,12 +595,21 @@ export async function loadQuestionThreads(
   let questionRows: any[] = initialQuestionsResult.data ?? []
   let questionError: unknown = initialQuestionsResult.error
   if (questionError && isMissingDatabaseObject(questionError)) {
-    const fallbackResult = await supabase
+    const noImagesResult = await supabase
       .from(QUESTIONS_TABLE)
-      .select("id, content, author_name, created_at")
+      .select("id, content, author_name, is_anonymous, created_at")
       .order("created_at", { ascending: false })
-    questionRows = fallbackResult.data ?? []
-    questionError = fallbackResult.error
+    questionRows = noImagesResult.data ?? []
+    questionError = noImagesResult.error
+
+    if (questionError && isMissingDatabaseObject(questionError)) {
+      const legacyResult = await supabase
+        .from(QUESTIONS_TABLE)
+        .select("id, content, author_name, created_at")
+        .order("created_at", { ascending: false })
+      questionRows = legacyResult.data ?? []
+      questionError = legacyResult.error
+    }
   }
   throwIfError(questionError)
 
@@ -608,31 +646,208 @@ export async function loadQuestionThreads(
   })
 }
 
+export type QuestionSubmitStage = "uploading" | "saving"
+
+function questionImageReservationError(error: unknown): Error {
+  if (isMissingDatabaseObject(error)) {
+    return new Error(
+      "사진 첨부 기능을 사용하려면 최신 Supabase 스키마를 먼저 적용해 주세요.",
+    )
+  }
+
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String(error.message ?? "").trim()
+      : ""
+  const isSafeMessage = [
+    "사진",
+    "처리 중인 사진",
+    "시간당 사진",
+    "하루 사진",
+    "계정의 사진",
+    "로그인이 필요",
+  ].some((prefix) => message.startsWith(prefix))
+
+  return new Error(
+    isSafeMessage
+      ? `사진 첨부: ${message}`
+      : "사진 업로드를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  )
+}
+
+async function cleanupQuestionImageUploads(
+  supabase: SupabaseClient,
+  reservedPaths: string[],
+): Promise<void> {
+  if (!reservedPaths.length) return
+
+  // Remove every reserved path, not only uploads that returned success. The
+  // server may have stored an object even if its network response was lost.
+  try {
+    await supabase.storage.from(QUESTION_IMAGE_BUCKET).remove(reservedPaths)
+  } catch {
+    // The cancellation RPC below is the final source-of-truth check: it only
+    // cancels a reservation after confirming that no Storage object remains.
+  }
+
+  try {
+    const { error } = await supabase.rpc(CANCEL_QUESTION_IMAGES_RPC, {
+      p_object_paths: reservedPaths,
+    })
+    if (error) return
+  } catch {
+    // The original submit error remains the useful message for the user.
+  }
+}
+
+async function questionSubmitClient(
+  expectedUserId?: string,
+): Promise<SupabaseClient> {
+  const sessionClient = await requiredClient()
+  const { data, error } = await sessionClient.auth.getSession()
+  if (error || !data.session?.access_token) {
+    throw new Error("질문을 등록하는 동안 로그인이 해제되었습니다. 다시 시도해 주세요.")
+  }
+  if (expectedUserId && data.session.user.id !== expectedUserId) {
+    throw new Error("질문을 등록하는 동안 계정이 변경되었습니다. 다시 시도해 주세요.")
+  }
+
+  // Freeze the submit to its starting account. Global sign-out or account
+  // switching cannot make later Storage/DB steps run as a different user.
+  const accessToken = data.session.access_token
+  const { createClient } = await import("@supabase/supabase-js")
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    accessToken: async () => accessToken,
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  })
+}
+
 export async function createQuestion(
   content: string,
   isAnonymous = false,
+  imageFiles: File[] = [],
+  onStage?: (stage: QuestionSubmitStage) => void,
+  expectedUserId?: string,
 ): Promise<QuestionPost> {
-  const supabase = await requiredClient()
-  const initialResult = await supabase
-
-    .from(QUESTIONS_TABLE)
-    .insert({ content: content.trim(), is_anonymous: isAnonymous })
-    .select("id, content, author_name, is_anonymous, created_at")
-    .single()
-  let questionData: any = initialResult.data
-  let questionError: unknown = initialResult.error
-  if (questionError && isMissingDatabaseObject(questionError) && !isAnonymous) {
-    const fallbackResult = await supabase
-      .from(QUESTIONS_TABLE)
-      .insert({ content: content.trim() })
-      .select("id, content, author_name, created_at")
-      .single()
-    questionData = fallbackResult.data
-    questionError = fallbackResult.error
+  const supabase = await questionSubmitClient(expectedUserId)
+  if (imageFiles.length > QUESTION_IMAGE_MAX_COUNT) {
+    throw new Error("질문에는 사진을 최대 3장까지 첨부할 수 있습니다.")
   }
-  throwIfError(questionError)
-  if (!questionData) throw new Error("질문 저장 결과를 불러오지 못했습니다.")
-  return mapQuestion(questionData)
+
+  const contentTypes = imageFiles.map((file) => {
+    validateQuestionImageFile(file)
+    return file.type.toLowerCase()
+  })
+  const reservedPaths: string[] = []
+  const uploadedPaths: string[] = []
+  try {
+    if (imageFiles.length) {
+      onStage?.("uploading")
+      const reservationResult = await supabase.rpc(
+        RESERVE_QUESTION_IMAGES_RPC,
+        { p_mime_types: contentTypes },
+      )
+      if (reservationResult.error) {
+        throw questionImageReservationError(reservationResult.error)
+      }
+
+      for (const [index, row] of (reservationResult.data ?? []).entries()) {
+        const path = String(row?.object_path ?? "").trim().toLowerCase()
+        const extension = QUESTION_IMAGE_EXTENSION_BY_TYPE[contentTypes[index]]
+        if (
+          !QUESTION_IMAGE_PATH_PATTERN.test(path) ||
+          !extension ||
+          !path.endsWith(`.${extension}`)
+        ) {
+          throw new Error("사진 업로드 경로를 안전하게 준비하지 못했습니다.")
+        }
+        reservedPaths.push(path)
+      }
+
+      if (
+        reservedPaths.length !== imageFiles.length ||
+        new Set(reservedPaths).size !== reservedPaths.length
+      ) {
+        throw new Error("사진 업로드 경로를 안전하게 준비하지 못했습니다.")
+      }
+    }
+
+    for (const [index, file] of imageFiles.entries()) {
+      const path = reservedPaths[index]
+      const contentType = contentTypes[index]
+      const { error } = await supabase.storage
+        .from(QUESTION_IMAGE_BUCKET)
+        .upload(path, file, {
+          cacheControl: "31536000",
+          contentType,
+          upsert: false,
+        })
+      if (error) {
+        throw new Error(
+          "사진을 업로드하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        )
+      }
+      uploadedPaths.push(path)
+    }
+
+    onStage?.("saving")
+    const initialResult = await supabase
+      .from(QUESTIONS_TABLE)
+      .insert({
+        content: content.trim(),
+        is_anonymous: isAnonymous,
+        image_paths: uploadedPaths,
+      })
+      .select(
+        "id, content, author_name, is_anonymous, image_paths, created_at",
+      )
+      .single()
+
+    let questionData: any = initialResult.data
+    let questionError: unknown = initialResult.error
+    if (questionError && isMissingDatabaseObject(questionError)) {
+      if (uploadedPaths.length) {
+        throw new Error(
+          "사진 첨부 기능을 사용하려면 최신 Supabase 스키마를 먼저 적용해 주세요.",
+        )
+      }
+
+      const noImagesResult = await supabase
+        .from(QUESTIONS_TABLE)
+        .insert({ content: content.trim(), is_anonymous: isAnonymous })
+        .select("id, content, author_name, is_anonymous, created_at")
+        .single()
+      questionData = noImagesResult.data
+      questionError = noImagesResult.error
+
+      if (
+        questionError &&
+        isMissingDatabaseObject(questionError) &&
+        !isAnonymous
+      ) {
+        const legacyResult = await supabase
+          .from(QUESTIONS_TABLE)
+          .insert({ content: content.trim() })
+          .select("id, content, author_name, created_at")
+          .single()
+        questionData = legacyResult.data
+        questionError = legacyResult.error
+      }
+    }
+
+    throwIfError(questionError)
+    if (!questionData) {
+      throw new Error("질문 저장 결과를 불러오지 못했습니다.")
+    }
+    return mapQuestion(questionData)
+  } catch (error) {
+    await cleanupQuestionImageUploads(supabase, reservedPaths)
+    throw error
+  }
 }
 
 export async function createQuestionAnswer(

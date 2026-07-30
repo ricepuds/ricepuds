@@ -3,7 +3,13 @@ import {
   createQuestion,
   createQuestionAnswer,
   loadQuestionThreads,
+  type QuestionSubmitStage,
 } from "./supabase"
+import {
+  prepareQuestionImageFile,
+  QUESTION_IMAGE_ACCEPT,
+  QUESTION_IMAGE_MAX_COUNT,
+} from "./questionImages"
 import type { AuthUser, QuestionPost } from "./types"
 
 interface QnaPageProps {
@@ -14,6 +20,12 @@ interface QnaPageProps {
 
 const QUESTION_LIMIT = 500
 const ANSWER_LIMIT = 1000
+
+interface QuestionImageDraft {
+  id: string
+  file: File
+  previewUrl: string
+}
 
 type QuestionLoadError = "" | "schema" | "request"
 
@@ -44,6 +56,18 @@ function avatarLabel(name: string): string {
   return name.trim().charAt(0).toUpperCase() || "?"
 }
 
+function questionSubmitErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : ""
+  if (
+    ["사진", "JPG", "질문에는", "질문을 등록", "이 브라우저"].some((prefix) =>
+      message.startsWith(prefix),
+    )
+  ) {
+    return message
+  }
+  return "질문을 서버에 저장하지 못했습니다."
+}
+
 export default function QnaPage({
   user,
   onRequireLogin,
@@ -51,18 +75,110 @@ export default function QnaPage({
 }: QnaPageProps) {
   const [questions, setQuestions] = useState<QuestionPost[]>([])
   const [questionDraft, setQuestionDraft] = useState("")
+  const [questionImages, setQuestionImages] = useState<QuestionImageDraft[]>([])
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<QuestionLoadError>("")
-  const [submittingQuestion, setSubmittingQuestion] = useState(false)
+  const [processingImages, setProcessingImages] = useState(false)
+  const [questionSubmitStage, setQuestionSubmitStage] = useState<
+    "idle" | QuestionSubmitStage
+  >("idle")
   const [submittingAnswer, setSubmittingAnswer] = useState<string | null>(null)
   const loadRequestRef = useRef(0)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const imageProcessRequestRef = useRef(0)
+  const questionImagesRef = useRef<QuestionImageDraft[]>([])
+  const questionSubmitRequestRef = useRef(0)
+  const questionSubmitActiveRef = useRef(false)
   const previousUserIdRef = useRef(user?.id)
+  const submittingQuestion = questionSubmitStage !== "idle"
 
   const answeredCount = useMemo(
     () => questions.filter((question) => question.answers.length > 0).length,
     [questions],
+  )
+
+  const clearQuestionImages = useCallback(() => {
+    imageProcessRequestRef.current += 1
+    setProcessingImages(false)
+    setQuestionImages((current) => {
+      current.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+      return []
+    })
+    if (imageInputRef.current) imageInputRef.current.value = ""
+  }, [])
+
+  const handleQuestionImageSelection = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const selectedFiles = Array.from(event.currentTarget.files ?? [])
+    event.currentTarget.value = ""
+    if (!selectedFiles.length) return
+
+    const availableSlots = QUESTION_IMAGE_MAX_COUNT - questionImages.length
+    if (availableSlots <= 0) {
+      onToast("질문에는 사진을 최대 3장까지 첨부할 수 있습니다.", "error")
+      return
+    }
+    if (selectedFiles.length > availableSlots) {
+      onToast(`사진은 ${availableSlots}장 더 첨부할 수 있습니다.`, "error")
+    }
+
+    const requestId = ++imageProcessRequestRef.current
+    setProcessingImages(true)
+    try {
+      const preparedFiles: File[] = []
+      for (const file of selectedFiles.slice(0, availableSlots)) {
+        preparedFiles.push(await prepareQuestionImageFile(file))
+      }
+      if (requestId !== imageProcessRequestRef.current) return
+
+      const nextImages = preparedFiles.map((file, index) => ({
+        id:
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${index}-${file.size}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }))
+      setQuestionImages((current) => [...current, ...nextImages])
+    } catch (error) {
+      if (requestId !== imageProcessRequestRef.current) return
+      onToast(
+        error instanceof Error
+          ? error.message
+          : "사진을 처리하지 못했습니다.",
+        "error",
+      )
+    } finally {
+      if (requestId === imageProcessRequestRef.current) {
+        setProcessingImages(false)
+      }
+    }
+  }
+
+  const removeQuestionImage = (imageId: string) => {
+    setQuestionImages((current) => {
+      const target = current.find((image) => image.id === imageId)
+      if (target) URL.revokeObjectURL(target.previewUrl)
+      return current.filter((image) => image.id !== imageId)
+    })
+  }
+
+  useEffect(() => {
+    questionImagesRef.current = questionImages
+  }, [questionImages])
+
+  useEffect(
+    () => () => {
+      imageProcessRequestRef.current += 1
+      questionSubmitRequestRef.current += 1
+      questionSubmitActiveRef.current = false
+      questionImagesRef.current.forEach((image) =>
+        URL.revokeObjectURL(image.previewUrl),
+      )
+    },
+    [],
   )
 
   const loadQuestions = useCallback(async () => {
@@ -93,12 +209,16 @@ export default function QnaPage({
     const previousUserId = previousUserIdRef.current
     const nextUserId = user?.id
     if (previousUserId && previousUserId !== nextUserId) {
+      questionSubmitRequestRef.current += 1
+      questionSubmitActiveRef.current = false
+      setQuestionSubmitStage("idle")
       setQuestionDraft("")
+      clearQuestionImages()
       setIsAnonymous(false)
       setAnswerDrafts({})
     }
     previousUserIdRef.current = nextUserId
-  }, [user?.id])
+  }, [clearQuestionImages, user?.id])
 
   const handleQuestionSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -108,35 +228,59 @@ export default function QnaPage({
       onRequireLogin()
       return
     }
+    if (questionSubmitActiveRef.current) return
 
     const content = questionDraft.trim()
     if (!content) {
       onToast("질문 내용을 입력해 주세요.", "error")
       return
     }
+    if (processingImages) {
+      onToast("사진 처리가 끝날 때까지 잠시 기다려 주세요.", "error")
+      return
+    }
 
-    setSubmittingQuestion(true)
+    const requestId = ++questionSubmitRequestRef.current
+    questionSubmitActiveRef.current = true
+    const submitUser = user
+    setQuestionSubmitStage(questionImages.length ? "uploading" : "saving")
     try {
-      const created = await createQuestion(content, isAnonymous)
+      const created = await createQuestion(
+        content,
+        isAnonymous,
+        questionImages.map((image) => image.file),
+        (stage) => {
+          if (requestId === questionSubmitRequestRef.current) {
+            setQuestionSubmitStage(stage)
+          }
+        },
+        submitUser.id,
+      )
+      if (requestId !== questionSubmitRequestRef.current) return
       loadRequestRef.current += 1
       setLoading(false)
       setQuestions((current) => [
-        user.isAdmin && isAnonymous
+        submitUser.isAdmin && isAnonymous
           ? {
               ...created,
-              actualAuthorName: user.name,
-              authorEmail: user.email,
+              actualAuthorName: submitUser.name,
+              authorEmail: submitUser.email,
             }
           : created,
         ...current,
       ])
       setQuestionDraft("")
+      clearQuestionImages()
       setIsAnonymous(false)
       onToast("질문을 등록했습니다.", "success")
-    } catch {
-      onToast("질문을 서버에 저장하지 못했습니다.", "error")
+    } catch (error) {
+      if (requestId !== questionSubmitRequestRef.current) return
+      onToast(questionSubmitErrorMessage(error), "error")
     } finally {
-      setSubmittingQuestion(false)
+      if (requestId === questionSubmitRequestRef.current) {
+        questionSubmitActiveRef.current = false
+        setQuestionSubmitStage("idle")
+      }
     }
   }
 
@@ -215,6 +359,7 @@ export default function QnaPage({
             <form onSubmit={handleQuestionSubmit}>
               <label htmlFor="new-question">무엇이 궁금한가요?</label>
               <textarea
+                disabled={submittingQuestion}
                 id="new-question"
                 maxLength={QUESTION_LIMIT}
                 onChange={(event) => setQuestionDraft(event.target.value)}
@@ -222,6 +367,68 @@ export default function QnaPage({
                 rows={3}
                 value={questionDraft}
               />
+              <div className="question-image-tools">
+                <input
+                  accept={QUESTION_IMAGE_ACCEPT}
+                  aria-describedby="question-image-help"
+                  aria-label="질문 사진 선택"
+                  className="sr-only"
+                  disabled={processingImages || submittingQuestion}
+                  multiple
+                  onChange={(event) =>
+                    void handleQuestionImageSelection(event)
+                  }
+                  ref={imageInputRef}
+                  tabIndex={-1}
+                  type="file"
+                />
+                <button
+                  aria-describedby="question-image-help"
+                  className="question-image-add"
+                  disabled={
+                    processingImages ||
+                    submittingQuestion ||
+                    questionImages.length >= QUESTION_IMAGE_MAX_COUNT
+                  }
+                  onClick={() => imageInputRef.current?.click()}
+                  type="button"
+                >
+                  <span aria-hidden="true">▧</span>
+                  {processingImages
+                    ? "사진 준비 중…"
+                    : questionImages.length >= QUESTION_IMAGE_MAX_COUNT
+                      ? "사진 3장 첨부됨"
+                      : "사진 첨부"}
+                </button>
+                <p id="question-image-help">
+                  JPG·PNG·WebP · 장당 5MB · 최대 3장 · 위치정보 제거 후 업로드
+                </p>
+              </div>
+
+              {questionImages.length > 0 && (
+                <div
+                  aria-label={`첨부할 사진 ${questionImages.length}장`}
+                  aria-live="polite"
+                  className="question-image-preview-list"
+                >
+                  {questionImages.map((image, index) => (
+                    <div className="question-image-preview" key={image.id}>
+                      <img
+                        alt={`질문에 첨부할 사진 미리보기 ${index + 1}`}
+                        src={image.previewUrl}
+                      />
+                      <button
+                        aria-label={`${index + 1}번째 첨부 사진 제거`}
+                        disabled={processingImages || submittingQuestion}
+                        onClick={() => removeQuestionImage(image.id)}
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <footer>
                 <div className="question-composer-meta">
                   <div className="question-anonymous-option">
@@ -253,14 +460,28 @@ export default function QnaPage({
                   className="button primary"
                   disabled={
                     submittingQuestion ||
+                    processingImages ||
                     !questionDraft.trim() ||
                     loadError === "schema"
                   }
                   type="submit"
                 >
-                  {submittingQuestion ? "등록 중…" : "질문 올리기"}
+                  {questionSubmitStage === "uploading"
+                    ? "사진 업로드 중…"
+                    : questionSubmitStage === "saving"
+                      ? "질문 등록 중…"
+                      : "질문 올리기"}
                 </button>
               </footer>
+              <span aria-live="polite" className="sr-only" role="status">
+                {processingImages
+                  ? "사진을 안전하게 준비하고 있습니다."
+                  : questionSubmitStage === "uploading"
+                    ? "사진을 업로드하고 있습니다."
+                    : questionSubmitStage === "saving"
+                      ? "질문을 등록하고 있습니다."
+                      : ""}
+              </span>
             </form>
           ) : (
             <div className="questions-login-prompt">
@@ -360,6 +581,23 @@ export default function QnaPage({
                   <div className="question-message">
                     <span>질문</span>
                     <p>{question.content}</p>
+                    {question.imageUrls.length > 0 && (
+                      <div
+                        aria-label={`질문 첨부 사진 ${question.imageUrls.length}장`}
+                        className={`question-attachment-grid is-count-${question.imageUrls.length}`}
+                      >
+                        {question.imageUrls.map((imageUrl, index) => (
+                          <img
+                            alt={`질문 첨부 사진 ${index + 1}`}
+                            decoding="async"
+                            key={imageUrl}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            src={imageUrl}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {question.answers.length > 0 ? (

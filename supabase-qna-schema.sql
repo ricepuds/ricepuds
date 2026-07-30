@@ -72,11 +72,320 @@ create table if not exists public.science_lab_questions (
   author_name text not null default '사용자',
   content text not null check (char_length(btrim(content)) between 1 and 500),
   is_anonymous boolean not null default false,
+  image_paths text[] not null default '{}'::text[],
   created_at timestamptz not null default now()
 );
 
 alter table public.science_lab_questions
   add column if not exists is_anonymous boolean not null default false;
+alter table public.science_lab_questions
+  add column if not exists image_paths text[] not null default '{}'::text[];
+alter table public.science_lab_questions
+  drop constraint if exists science_lab_questions_image_count_check;
+alter table public.science_lab_questions
+  add constraint science_lab_questions_image_count_check
+  check (cardinality(image_paths) between 0 and 3);
+
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+) values (
+  'science-lab-question-images',
+  'science-lab-question-images',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']::text[]
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+create table if not exists public.science_lab_question_image_uploads (
+  object_path text primary key
+    check (object_path ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$'),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  mime_type text not null
+    check (mime_type in ('image/jpeg', 'image/png', 'image/webp')),
+  expires_at timestamptz not null,
+  -- Keep the audit row when a question is removed. Storage objects must be
+  -- deleted through the Storage API before the question can be removed.
+  attached_question_id uuid references public.science_lab_questions(id) on delete restrict,
+  attached_at timestamptz,
+  cancelled_at timestamptz,
+  claimed_at timestamptz,
+  claim_txid bigint,
+  created_at timestamptz not null default now(),
+  check (attached_question_id is not null or attached_at is null),
+  constraint science_lab_question_image_uploads_claim_check
+    check ((claimed_at is null) = (claim_txid is null))
+);
+
+alter table public.science_lab_question_image_uploads
+  add column if not exists claimed_at timestamptz,
+  add column if not exists claim_txid bigint;
+alter table public.science_lab_question_image_uploads
+  drop constraint if exists science_lab_question_image_uploads_claim_check;
+alter table public.science_lab_question_image_uploads
+  add constraint science_lab_question_image_uploads_claim_check
+  check ((claimed_at is null) = (claim_txid is null));
+
+create index if not exists science_lab_question_image_uploads_owner_created_idx
+  on public.science_lab_question_image_uploads (owner_id, created_at desc);
+create index if not exists science_lab_question_image_uploads_pending_idx
+  on public.science_lab_question_image_uploads (owner_id, expires_at)
+  where attached_question_id is null and cancelled_at is null;
+
+alter table public.science_lab_question_image_uploads enable row level security;
+revoke all on public.science_lab_question_image_uploads from public, anon, authenticated;
+
+create or replace function public.reserve_science_lab_question_images(
+  p_mime_types text[]
+)
+returns table (object_path text)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  requester_id uuid := auth.uid();
+  requested_count integer := coalesce(cardinality(p_mime_types), 0);
+  requested_mime_type text;
+  object_extension text;
+  reserved_path text;
+begin
+  if requester_id is null then
+    raise exception using errcode = '42501', message = '로그인이 필요합니다.';
+  end if;
+  if requested_count not between 1 and 3 then
+    raise exception using errcode = '22023', message = '사진은 한 번에 1~3장만 준비할 수 있습니다.';
+  end if;
+
+  -- Serialize each account's reservations so simultaneous requests cannot
+  -- race past the pending/hourly/daily quota checks below.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(requester_id::text, 0)
+  );
+
+  delete from public.science_lab_question_image_uploads as upload
+   where upload.owner_id = requester_id
+     and upload.created_at < now() - interval '7 days'
+     and upload.attached_question_id is null
+     and not exists (
+       select 1
+         from storage.objects as object
+        where object.bucket_id = 'science-lab-question-images'
+          and object.name = upload.object_path
+     );
+
+  if (
+    select count(*) + requested_count
+      from public.science_lab_question_image_uploads as upload
+     where upload.owner_id = requester_id
+       and upload.attached_question_id is null
+       and upload.cancelled_at is null
+       and upload.expires_at > now()
+  ) > 6 then
+    raise exception using errcode = '54000', message = '처리 중인 사진이 많습니다. 잠시 후 다시 시도해 주세요.';
+  end if;
+
+  if (
+    select count(*) + requested_count
+      from public.science_lab_question_image_uploads as upload
+     where upload.owner_id = requester_id
+       and upload.created_at > now() - interval '1 hour'
+  ) > 12 then
+    raise exception using errcode = '54000', message = '시간당 사진 첨부 한도를 초과했습니다.';
+  end if;
+
+  if (
+    select count(*) + requested_count
+      from public.science_lab_question_image_uploads as upload
+     where upload.owner_id = requester_id
+       and upload.created_at > now() - interval '1 day'
+  ) > 30 then
+    raise exception using errcode = '54000', message = '하루 사진 첨부 한도를 초과했습니다.';
+  end if;
+
+  if (
+    (
+      select count(*)
+        from storage.objects as object
+       where object.bucket_id = 'science-lab-question-images'
+         and object.owner_id = requester_id::text
+    ) + (
+      select count(*)
+        from public.science_lab_question_image_uploads as upload
+       where upload.owner_id = requester_id
+         and upload.attached_question_id is null
+         and upload.cancelled_at is null
+         and upload.expires_at > now()
+         and not exists (
+           select 1
+             from storage.objects as object
+            where object.bucket_id = 'science-lab-question-images'
+              and object.name = upload.object_path
+         )
+    ) + requested_count
+  ) > 60 then
+    raise exception using errcode = '54000', message = '계정의 사진 저장 한도를 초과했습니다.';
+  end if;
+
+  foreach requested_mime_type in array p_mime_types loop
+    requested_mime_type := lower(btrim(coalesce(requested_mime_type, '')));
+    object_extension := case requested_mime_type
+      when 'image/jpeg' then 'jpg'
+      when 'image/png' then 'png'
+      when 'image/webp' then 'webp'
+      else null
+    end;
+    if object_extension is null then
+      raise exception using errcode = '22023', message = 'JPG, PNG, WebP 사진만 첨부할 수 있습니다.';
+    end if;
+
+    reserved_path := gen_random_uuid()::text || '.' || object_extension;
+    insert into public.science_lab_question_image_uploads (
+      object_path,
+      owner_id,
+      mime_type,
+      expires_at
+    ) values (
+      reserved_path,
+      requester_id,
+      requested_mime_type,
+      now() + interval '15 minutes'
+    );
+
+    object_path := reserved_path;
+    return next;
+  end loop;
+end;
+$$;
+
+create or replace function public.can_upload_science_lab_question_image(
+  p_object_path text
+)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  requester_id uuid := auth.uid();
+  claimed_path text;
+  current_txid bigint := pg_catalog.txid_current();
+begin
+  if requester_id is null then
+    return false;
+  end if;
+
+  -- Claim the path atomically in the Storage INSERT transaction. Repeated
+  -- policy evaluation in that same transaction is allowed, but a later
+  -- upload (including after deletion) cannot reuse the reservation.
+  update public.science_lab_question_image_uploads as upload
+     set claimed_at = coalesce(upload.claimed_at, now()),
+         claim_txid = coalesce(upload.claim_txid, current_txid)
+   where upload.object_path = p_object_path
+     and upload.owner_id = requester_id
+     and upload.attached_question_id is null
+     and upload.cancelled_at is null
+     and upload.expires_at > now()
+     and (upload.claimed_at is null or upload.claim_txid = current_txid)
+  returning upload.object_path into claimed_path;
+
+  return claimed_path is not null;
+end;
+$$;
+
+create or replace function public.can_remove_science_lab_question_image(
+  p_object_path text
+)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  requester_id uuid := auth.uid();
+  removable_path text;
+begin
+  if requester_id is null then
+    return false;
+  end if;
+
+  -- Use the same lock order as question attachment so an ambiguous submit
+  -- response cannot delete a file while the question is being committed.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(requester_id::text, 0)
+  );
+
+  select upload.object_path
+    into removable_path
+    from public.science_lab_question_image_uploads as upload
+   where upload.object_path = p_object_path
+     and upload.owner_id = requester_id
+     and upload.attached_question_id is null
+   for update;
+
+  return removable_path is not null;
+end;
+$$;
+
+create or replace function public.cancel_science_lab_question_images(
+  p_object_paths text[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  requester_id uuid := auth.uid();
+begin
+  if requester_id is null then
+    raise exception using errcode = '42501', message = '로그인이 필요합니다.';
+  end if;
+  if coalesce(cardinality(p_object_paths), 0) not between 1 and 3 then
+    raise exception using errcode = '22023', message = '취소할 사진 경로가 올바르지 않습니다.';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(requester_id::text, 0)
+  );
+  if exists (
+    select 1
+      from unnest(p_object_paths) as candidate(path)
+     where not exists (
+       select 1
+         from public.science_lab_question_image_uploads as upload
+        where upload.object_path = candidate.path
+          and upload.owner_id = requester_id
+          and upload.attached_question_id is null
+     )
+  ) then
+    raise exception using errcode = '42501', message = '사진 업로드 취소 권한이 없습니다.';
+  end if;
+  if exists (
+    select 1
+      from storage.objects as object
+     where object.bucket_id = 'science-lab-question-images'
+       and object.name = any(p_object_paths)
+  ) then
+    raise exception using errcode = 'P0001', message = '저장소 사진을 먼저 삭제해 주세요.';
+  end if;
+
+  update public.science_lab_question_image_uploads as upload
+     set cancelled_at = coalesce(upload.cancelled_at, now())
+   where upload.owner_id = requester_id
+     and upload.object_path = any(p_object_paths)
+     and upload.attached_question_id is null;
+end;
+$$;
 
 create table if not exists public.science_lab_answers (
   id uuid primary key default gen_random_uuid(),
@@ -87,7 +396,8 @@ create table if not exists public.science_lab_answers (
   created_at timestamptz not null default now()
 );
 
--- 지정된 계정 이름을 프로필, 인증 메타데이터, 기존 공개 작성자명에 동기화합니다.
+-- 잘못 뒤바뀐 두 계정의 이름을 이메일 기준으로 정확히 교정하고,
+-- 프로필, 인증 메타데이터, 기존 공개 작성자명까지 동기화합니다.
 do $$
 declare
   desired record;
@@ -97,8 +407,8 @@ begin
   for desired in
     select *
       from (values
-        ('stst5192@naver.com'::text, '김형민'::text),
-        ('2min095156@gmail.com'::text, '윤슬기'::text)
+        ('2min095156@gmail.com'::text, '김형민'::text),
+        ('stst5192@naver.com'::text, '윤슬기'::text)
       ) as names(email, display_name)
   loop
     select users.id, users.created_at
@@ -186,8 +496,116 @@ begin
     raise exception using errcode = 'P0001', message = '계정 이름을 먼저 설정해 주세요.';
   end if;
 
+  new.image_paths := coalesce(new.image_paths, '{}'::text[]);
+  if cardinality(new.image_paths) > 3 then
+    raise exception using errcode = '22023', message = '질문에는 사진을 최대 3장까지 첨부할 수 있습니다.';
+  end if;
+
+  if cardinality(new.image_paths) <> (
+    select count(distinct candidate.path)
+      from unnest(new.image_paths) as candidate(path)
+  ) then
+    raise exception using errcode = '22023', message = '같은 사진을 중복 첨부할 수 없습니다.';
+  end if;
+
+  if cardinality(new.image_paths) > 0 then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(auth.uid()::text, 0)
+    );
+  end if;
+
+  perform upload.object_path
+    from public.science_lab_question_image_uploads as upload
+   where upload.owner_id = auth.uid()
+     and upload.object_path = any(new.image_paths)
+     and upload.attached_question_id is null
+     and upload.cancelled_at is null
+     and upload.expires_at > now()
+   order by upload.object_path
+   for update;
+
+  if (
+    select count(*)
+      from public.science_lab_question_image_uploads as upload
+     where upload.owner_id = auth.uid()
+       and upload.object_path = any(new.image_paths)
+       and upload.attached_question_id is null
+       and upload.cancelled_at is null
+       and upload.expires_at > now()
+  ) <> cardinality(new.image_paths) then
+    raise exception using errcode = '42501', message = '유효한 사진 업로드 준비 정보가 없습니다.';
+  end if;
+
+  if exists (
+    select 1
+      from unnest(new.image_paths) as candidate(path)
+     where candidate.path !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$'
+        or not exists (
+          select 1
+            from public.science_lab_question_image_uploads as upload
+            join storage.objects as object
+              on object.bucket_id = 'science-lab-question-images'
+             and object.name = upload.object_path
+           where upload.object_path = candidate.path
+             and upload.owner_id = auth.uid()
+             and upload.attached_question_id is null
+             and upload.cancelled_at is null
+             and upload.expires_at > now()
+             and object.name = candidate.path
+             and object.owner_id = auth.uid()::text
+             and upload.mime_type = lower(coalesce(object.metadata ->> 'mimetype', ''))
+             and (
+               (candidate.path ~ '\.jpg$' and lower(coalesce(object.metadata ->> 'mimetype', '')) = 'image/jpeg')
+               or (candidate.path ~ '\.png$' and lower(coalesce(object.metadata ->> 'mimetype', '')) = 'image/png')
+               or (candidate.path ~ '\.webp$' and lower(coalesce(object.metadata ->> 'mimetype', '')) = 'image/webp')
+             )
+             and (
+               case
+                 when coalesce(object.metadata ->> 'size', '') ~ '^[0-9]+$'
+                   then (object.metadata ->> 'size')::bigint
+                 else null
+               end
+             ) between 1 and 5242880
+        )
+  ) then
+    raise exception using errcode = '42501', message = '업로드한 본인의 사진만 질문에 첨부할 수 있습니다.';
+  end if;
+
   new.author_id := auth.uid();
   new.author_name := case when new.is_anonymous then '익명' else profile_name end;
+  return new;
+end;
+$$;
+
+create or replace function public.attach_science_lab_question_images()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  attached_count integer;
+begin
+  if cardinality(coalesce(new.image_paths, '{}'::text[])) = 0 then
+    return new;
+  end if;
+
+  -- The BEFORE trigger already locked and validated these rows. Linking them
+  -- AFTER INSERT avoids referencing a question row that does not exist yet.
+  update public.science_lab_question_image_uploads as upload
+     set attached_question_id = new.id,
+         attached_at = now()
+   where upload.owner_id = new.author_id
+     and upload.object_path = any(new.image_paths)
+     and upload.attached_question_id is null
+     and upload.cancelled_at is null
+     and upload.expires_at > now();
+
+  get diagnostics attached_count = row_count;
+  if attached_count <> cardinality(new.image_paths) then
+    raise exception using errcode = '42501', message = '사진 첨부 정보를 질문에 연결하지 못했습니다.';
+  end if;
+
   return new;
 end;
 $$;
@@ -225,6 +643,12 @@ drop trigger if exists set_science_lab_question_author_before_insert
 create trigger set_science_lab_question_author_before_insert
   before insert on public.science_lab_questions
   for each row execute function public.set_science_lab_question_author();
+
+drop trigger if exists attach_science_lab_question_images_after_insert
+  on public.science_lab_questions;
+create trigger attach_science_lab_question_images_after_insert
+  after insert on public.science_lab_questions
+  for each row execute function public.attach_science_lab_question_images();
 
 drop trigger if exists set_science_lab_answer_author_before_insert
   on public.science_lab_answers;
@@ -378,20 +802,29 @@ grant select (display_name, name_change_available)
 
 revoke select on public.science_lab_questions, public.science_lab_answers
   from anon, authenticated;
-grant select (id, author_name, content, is_anonymous, created_at)
+grant select (id, author_name, content, is_anonymous, image_paths, created_at)
   on public.science_lab_questions to anon, authenticated;
 grant select (id, question_id, author_name, content, created_at)
   on public.science_lab_answers to anon, authenticated;
 revoke insert, update, delete on public.science_lab_questions, public.science_lab_answers
   from anon, authenticated;
-grant insert (content, is_anonymous)
+grant insert (content, is_anonymous, image_paths)
   on public.science_lab_questions to authenticated;
 grant insert (question_id, content)
   on public.science_lab_answers to authenticated;
 
 revoke all on function public.create_science_lab_profile() from public, anon, authenticated;
 revoke all on function public.set_science_lab_question_author() from public, anon, authenticated;
+revoke all on function public.attach_science_lab_question_images() from public, anon, authenticated;
 revoke all on function public.set_science_lab_answer_author() from public, anon, authenticated;
+revoke all on function public.reserve_science_lab_question_images(text[]) from public, anon, authenticated;
+grant execute on function public.reserve_science_lab_question_images(text[]) to authenticated;
+revoke all on function public.can_upload_science_lab_question_image(text) from public, anon, authenticated;
+grant execute on function public.can_upload_science_lab_question_image(text) to authenticated;
+revoke all on function public.can_remove_science_lab_question_image(text) from public, anon, authenticated;
+grant execute on function public.can_remove_science_lab_question_image(text) to authenticated;
+revoke all on function public.cancel_science_lab_question_images(text[]) from public, anon, authenticated;
+grant execute on function public.cancel_science_lab_question_images(text[]) to authenticated;
 revoke all on function public.set_my_science_lab_name(text) from public, anon, authenticated;
 grant execute on function public.set_my_science_lab_name(text) to authenticated;
 revoke all on function public.get_science_lab_question_authors() from public, anon, authenticated;
@@ -419,6 +852,43 @@ create policy "Authenticated users can create own questions"
   for insert
   to authenticated
   with check (auth.uid() = author_id);
+
+drop policy if exists "Authenticated users can upload question images" on storage.objects;
+create policy "Authenticated users can upload question images"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'science-lab-question-images'
+    and name ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$'
+    and public.can_upload_science_lab_question_image(name)
+    and (
+      (name ~ '\.jpg$' and lower(coalesce(metadata ->> 'mimetype', '')) = 'image/jpeg')
+      or (name ~ '\.png$' and lower(coalesce(metadata ->> 'mimetype', '')) = 'image/png')
+      or (name ~ '\.webp$' and lower(coalesce(metadata ->> 'mimetype', '')) = 'image/webp')
+    )
+  );
+
+drop policy if exists "Users can inspect own question images" on storage.objects;
+create policy "Users can inspect own question images"
+  on storage.objects
+  for select
+  to authenticated
+  using (
+    bucket_id = 'science-lab-question-images'
+    and owner_id = (select auth.uid()::text)
+  );
+
+drop policy if exists "Users can remove unused question images" on storage.objects;
+create policy "Users can remove unused question images"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'science-lab-question-images'
+    and owner_id = (select auth.uid()::text)
+    and public.can_remove_science_lab_question_image(name)
+  );
 
 drop policy if exists "Anyone can read science lab answers" on public.science_lab_answers;
 create policy "Anyone can read science lab answers"
