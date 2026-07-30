@@ -1085,7 +1085,7 @@ export default function App() {
             </section>
           </main>
         ) : canViewAccounts ? (
-          <AccountListPage />
+          <AccountListPage onToast={showToast} />
         ) : (
           <main className="admin-access-page" id="main-content">
             <section className="ios-card admin-access-card">

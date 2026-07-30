@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ACCOUNT_LIST_VIEWER_EMAIL,
+  deleteManagedAccount,
   loadAccountList,
+  updateManagedAccountName,
 } from "./supabase"
 import type { AccountListItem } from "./types"
 
 type AccountLoadError = "" | "permission" | "schema" | "request"
+type AccountMutation = "rename" | "delete"
 
-const ACCOUNT_LOAD_ERROR_MESSAGE: Record<Exclude<AccountLoadError, "">, string> = {
-  permission:
-    "로그인 세션이 만료되었거나 계정 목록을 확인할 권한이 없습니다. 다시 로그인해 주세요.",
-  schema:
-    "계정 목록 기능이 아직 서버에 적용되지 않았습니다. 최신 Supabase 스키마를 먼저 실행해 주세요.",
-  request:
-    "계정 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+interface AccountListPageProps {
+  onToast: (text: string, tone?: "default" | "success" | "error") => void
 }
 
-function classifyAccountLoadError(error: unknown): Exclude<AccountLoadError, ""> {
+const ACCOUNT_LOAD_ERROR_MESSAGE: Record<Exclude<AccountLoadError, "">, string> =
+  {
+    permission:
+      "로그인 세션이 만료되었거나 계정 목록을 확인할 권한이 없습니다. 다시 로그인해 주세요.",
+    schema:
+      "계정 목록 기능이 아직 서버에 적용되지 않았습니다. 최신 Supabase 스키마를 먼저 실행해 주세요.",
+    request: "계정 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  }
+
+function classifyAccountLoadError(
+  error: unknown,
+): Exclude<AccountLoadError, ""> {
   if (!error || typeof error !== "object") return "request"
 
   const code = "code" in error ? String(error.code ?? "") : ""
@@ -24,7 +33,10 @@ function classifyAccountLoadError(error: unknown): Exclude<AccountLoadError, "">
   const message =
     "message" in error ? String(error.message ?? "").toLowerCase() : ""
 
-  if (["42883", "PGRST202"].includes(code) || message.includes("schema cache")) {
+  if (
+    ["42883", "PGRST202"].includes(code) ||
+    message.includes("schema cache")
+  ) {
     return "schema"
   }
   if (
@@ -55,11 +67,29 @@ function avatarLabel(name: string): string {
   return name.trim().charAt(0).toUpperCase() || "?"
 }
 
-export default function AccountListPage() {
+function mutationErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = String(error.message ?? "").trim()
+    if (message) return message
+  }
+  return fallback
+}
+
+export default function AccountListPage({ onToast }: AccountListPageProps) {
   const [accounts, setAccounts] = useState<AccountListItem[]>([])
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<AccountLoadError>("")
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
+  const [editedName, setEditedName] = useState("")
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(
+    null,
+  )
+  const [deleteConfirmation, setDeleteConfirmation] = useState("")
+  const [pendingMutation, setPendingMutation] = useState<{
+    accountId: string
+    type: AccountMutation
+  } | null>(null)
   const loadRequestRef = useRef(0)
 
   const loadAccounts = useCallback(async () => {
@@ -98,10 +128,102 @@ export default function AccountListPage() {
     )
   }, [accounts, query])
 
+  const openNameEditor = (account: AccountListItem) => {
+    setDeletingAccountId(null)
+    setDeleteConfirmation("")
+    setEditingAccountId(account.id)
+    setEditedName(account.name)
+  }
+
+  const closeNameEditor = () => {
+    setEditingAccountId(null)
+    setEditedName("")
+  }
+
+  const openDeleteConfirmation = (account: AccountListItem) => {
+    const isOwnerAccount =
+      account.email.trim().toLowerCase() === ACCOUNT_LIST_VIEWER_EMAIL
+    if (isOwnerAccount || !account.canDelete) {
+      onToast("소유자 계정은 삭제할 수 없습니다.", "error")
+      return
+    }
+
+    setEditingAccountId(null)
+    setEditedName("")
+    setDeletingAccountId(account.id)
+    setDeleteConfirmation("")
+  }
+
+  const closeDeleteConfirmation = () => {
+    setDeletingAccountId(null)
+    setDeleteConfirmation("")
+  }
+
+  const saveAccountName = async (account: AccountListItem) => {
+    const nextName = editedName.trim()
+    if (!nextName || nextName.length > 40) {
+      onToast("이름은 1자 이상 40자 이하로 입력해 주세요.", "error")
+      return
+    }
+
+    setPendingMutation({ accountId: account.id, type: "rename" })
+    try {
+      const result = await updateManagedAccountName(account.id, nextName)
+      setAccounts((current) =>
+        current.map((item) =>
+          item.id === account.id
+            ? {
+                ...item,
+                name: result.name,
+                canChangeName: result.canChangeName,
+              }
+            : item,
+        ),
+      )
+      closeNameEditor()
+      onToast(`${account.email} 계정의 이름을 수정했습니다.`, "success")
+    } catch (error) {
+      onToast(
+        mutationErrorMessage(error, "계정 이름을 수정하지 못했습니다."),
+        "error",
+      )
+      await loadAccounts()
+    } finally {
+      setPendingMutation(null)
+    }
+  }
+
+  const removeAccount = async (account: AccountListItem) => {
+    const isOwnerAccount =
+      account.email.trim().toLowerCase() === ACCOUNT_LIST_VIEWER_EMAIL
+    if (isOwnerAccount || !account.canDelete) {
+      onToast("소유자 계정은 삭제할 수 없습니다.", "error")
+      return
+    }
+    if (deleteConfirmation !== account.email) {
+      onToast("삭제할 계정의 이메일을 정확히 입력해 주세요.", "error")
+      return
+    }
+
+    setPendingMutation({ accountId: account.id, type: "delete" })
+    try {
+      await deleteManagedAccount(account.id)
+      setAccounts((current) => current.filter((item) => item.id !== account.id))
+      closeDeleteConfirmation()
+      onToast(`${account.email} 계정을 삭제했습니다.`, "success")
+    } catch (error) {
+      onToast(
+        mutationErrorMessage(error, "계정을 삭제하지 못했습니다."),
+        "error",
+      )
+      await loadAccounts()
+    } finally {
+      setPendingMutation(null)
+    }
+  }
+
   const adminCount = accounts.filter((account) => account.isAdmin).length
-  const renameCount = accounts.filter(
-    (account) => account.canChangeName,
-  ).length
+  const renameCount = accounts.filter((account) => account.canChangeName).length
   const formatCount = (count: number) =>
     loading || loadError ? "—" : count.toLocaleString("ko-KR")
 
@@ -113,8 +235,8 @@ export default function AccountListPage() {
             <p className="eyebrow">Private account directory</p>
             <h1>계정 목록</h1>
             <p>
-              가입한 계정의 이름과 이메일, 가입일과 최근 로그인 기록을
-              확인합니다.
+              가입한 계정 정보를 확인하고 이름 수정과 계정 삭제를 안전하게
+              관리합니다.
             </p>
           </div>
           <div className="account-list-lock">
@@ -190,48 +312,193 @@ export default function AccountListPage() {
             </div>
           ) : filteredAccounts.length ? (
             <div className="account-record-grid">
-              {filteredAccounts.map((account, index) => (
-                <article
-                  aria-labelledby={`account-record-${index}-name`}
-                  className="account-record-card"
-                  key={`${account.email}-${account.createdAt}`}
-                >
-                  <header>
-                    <span className="account-record-avatar" aria-hidden="true">
-                      {avatarLabel(account.name)}
-                    </span>
-                    <div className="account-record-identity">
-                      <h2 id={`account-record-${index}-name`}>
-                        {account.name}
-                      </h2>
-                      <span>{account.email || "이메일 없음"}</span>
-                    </div>
-                    <div className="account-record-badges">
-                      {account.email === ACCOUNT_LIST_VIEWER_EMAIL && (
-                        <span className="is-owner">소유자</span>
-                      )}
-                      {account.isAdmin && <span>관리자</span>}
-                    </div>
-                  </header>
+              {filteredAccounts.map((account, index) => {
+                const isOwnerAccount =
+                  account.email.trim().toLowerCase() ===
+                  ACCOUNT_LIST_VIEWER_EMAIL
+                const isPending = pendingMutation?.accountId === account.id
+                const isRenaming =
+                  isPending && pendingMutation.type === "rename"
+                const isDeleting =
+                  isPending && pendingMutation.type === "delete"
 
-                  <dl>
-                    <div>
-                      <dt>가입일</dt>
-                      <dd>{formatAccountDate(account.createdAt)}</dd>
+                return (
+                  <article
+                    aria-busy={isPending}
+                    aria-labelledby={`account-record-${index}-name`}
+                    className="account-record-card"
+                    key={account.id}
+                  >
+                    <header>
+                      <span
+                        className="account-record-avatar"
+                        aria-hidden="true"
+                      >
+                        {avatarLabel(account.name)}
+                      </span>
+                      <div className="account-record-identity">
+                        <h2 id={`account-record-${index}-name`}>
+                          {account.name}
+                        </h2>
+                        <span>{account.email || "이메일 없음"}</span>
+                      </div>
+                      <div className="account-record-badges">
+                        {account.email === ACCOUNT_LIST_VIEWER_EMAIL && (
+                          <span className="is-owner">소유자</span>
+                        )}
+                        {account.isAdmin && <span>관리자</span>}
+                      </div>
+                    </header>
+
+                    <dl>
+                      <div>
+                        <dt>가입일</dt>
+                        <dd>{formatAccountDate(account.createdAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>최근 로그인</dt>
+                        <dd>{formatAccountDate(account.lastSignInAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>이름 상태</dt>
+                        <dd>
+                          {account.canChangeName
+                            ? "1회 변경 가능"
+                            : "이름 확정"}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    <div className="account-record-actions">
+                      <button
+                        aria-expanded={editingAccountId === account.id}
+                        disabled={pendingMutation !== null}
+                        onClick={() => openNameEditor(account)}
+                        type="button"
+                      >
+                        이름 수정
+                      </button>
+                      <button
+                        aria-expanded={deletingAccountId === account.id}
+                        className="is-danger"
+                        disabled={
+                          pendingMutation !== null ||
+                          isOwnerAccount ||
+                          !account.canDelete
+                        }
+                        onClick={() => openDeleteConfirmation(account)}
+                        title={
+                          isOwnerAccount
+                            ? "소유자 계정은 삭제할 수 없습니다."
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        {isOwnerAccount ? "소유자 삭제 불가" : "계정 삭제"}
+                      </button>
                     </div>
-                    <div>
-                      <dt>최근 로그인</dt>
-                      <dd>{formatAccountDate(account.lastSignInAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>이름 상태</dt>
-                      <dd>
-                        {account.canChangeName ? "1회 변경 가능" : "이름 확정"}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
+
+                    {editingAccountId === account.id && (
+                      <form
+                        className="account-record-edit"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          void saveAccountName(account)
+                        }}
+                      >
+                        <label htmlFor={`account-name-${account.id}`}>
+                          새 이름
+                        </label>
+                        <input
+                          autoComplete="off"
+                          autoFocus
+                          disabled={isPending}
+                          id={`account-name-${account.id}`}
+                          maxLength={40}
+                          onChange={(event) =>
+                            setEditedName(event.target.value)
+                          }
+                          placeholder="1~40자 이름"
+                          value={editedName}
+                        />
+                        <div>
+                          <button
+                            disabled={isPending}
+                            onClick={closeNameEditor}
+                            type="button"
+                          >
+                            취소
+                          </button>
+                          <button
+                            disabled={isPending || !editedName.trim()}
+                            type="submit"
+                          >
+                            {isRenaming ? "저장 중" : "저장"}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {deletingAccountId === account.id && (
+                      <form
+                        className="account-record-delete"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          void removeAccount(account)
+                        }}
+                      >
+                        <strong>계정을 영구 삭제합니다.</strong>
+                        <p>
+                          이 계정이 작성한 질문·답변·사진이 삭제되며, 이 계정의
+                          질문에 다른 사용자가 단 답변도 함께 삭제됩니다. 되돌릴
+                          수 없습니다.
+                        </p>
+                        <label htmlFor={`account-delete-${account.id}`}>
+                          계속하려면 <code>{account.email}</code>을(를) 정확히
+                          입력하세요.
+                        </label>
+                        <input
+                          aria-describedby={`account-delete-warning-${account.id}`}
+                          autoCapitalize="none"
+                          autoComplete="off"
+                          disabled={isPending}
+                          id={`account-delete-${account.id}`}
+                          onChange={(event) =>
+                            setDeleteConfirmation(event.target.value)
+                          }
+                          placeholder={account.email}
+                          spellCheck={false}
+                          type="email"
+                          value={deleteConfirmation}
+                        />
+                        <span
+                          className="sr-only"
+                          id={`account-delete-warning-${account.id}`}
+                        >
+                          이메일이 완전히 일치해야 삭제할 수 있습니다.
+                        </span>
+                        <div>
+                          <button
+                            disabled={isPending}
+                            onClick={closeDeleteConfirmation}
+                            type="button"
+                          >
+                            취소
+                          </button>
+                          <button
+                            disabled={
+                              isPending || deleteConfirmation !== account.email
+                            }
+                            type="submit"
+                          >
+                            {isDeleting ? "삭제 중" : "영구 삭제"}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </article>
+                )
+              })}
             </div>
           ) : (
             <div className="account-list-state">

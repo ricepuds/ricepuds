@@ -52,7 +52,14 @@ const ANSWERS_TABLE = "science_lab_answers"
 const QUESTION_IMAGE_BUCKET = "science-lab-question-images"
 const SET_PROFILE_NAME_RPC = "set_my_science_lab_name"
 const QUESTION_AUTHORS_RPC = "get_science_lab_question_authors"
-const ACCOUNT_LIST_RPC = "get_science_lab_accounts"
+const ANSWER_AUTHORS_RPC = "get_science_lab_answer_authors"
+const ACCOUNT_LIST_RPC = "get_science_lab_accounts_v2"
+const UPDATE_MANAGED_ACCOUNT_NAME_RPC = "owner_update_science_lab_account_name"
+const PREPARE_MANAGED_ACCOUNT_DELETE_RPC = "prepare_science_lab_account_delete"
+const FINALIZE_MANAGED_ACCOUNT_DELETE_RPC =
+  "finalize_science_lab_account_delete"
+const PREPARE_QUESTION_DELETE_RPC = "prepare_science_lab_question_delete"
+const FINALIZE_QUESTION_DELETE_RPC = "finalize_science_lab_question_delete"
 const RESERVE_QUESTION_IMAGES_RPC = "reserve_science_lab_question_images"
 const CANCEL_QUESTION_IMAGES_RPC = "cancel_science_lab_question_images"
 
@@ -63,6 +70,9 @@ const QUESTION_IMAGE_EXTENSION_BY_TYPE: Record<string, string> = {
 }
 const QUESTION_IMAGE_PATH_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp)$/
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const STORAGE_DELETE_BATCH_SIZE = 1_000
 
 let clientPromise: Promise<SupabaseClient> | null = null
 
@@ -272,21 +282,157 @@ export async function loadAccountList(): Promise<AccountListItem[]> {
   return (data ?? []).map((row: any) => {
     const email = normalizeEmail(row.email)
     return {
+      id: String(row.account_id ?? ""),
       name: normalizeDisplayName(row.display_name) || "사용자",
       email,
       createdAt: String(row.created_at ?? ""),
-      lastSignInAt: row.last_sign_in_at
-        ? String(row.last_sign_in_at)
-        : null,
+      lastSignInAt: row.last_sign_in_at ? String(row.last_sign_in_at) : null,
       canChangeName: Boolean(row.name_change_available),
       isAdmin: isAdminEmail(email),
+      canDelete: Boolean(row.can_delete),
     }
   })
 }
 
+export async function updateManagedAccountName(
+  accountId: string,
+  name: string,
+): Promise<{ name: string; canChangeName: boolean }> {
+  const displayName = normalizeDisplayName(name)
+  if (!displayName || displayName.length > 40) {
+    throw new Error("이름은 1자 이상 40자 이하로 입력해 주세요.")
+  }
+
+  const supabase = await requiredClient()
+  const { data, error } = await supabase
+    .rpc(UPDATE_MANAGED_ACCOUNT_NAME_RPC, {
+      p_target_user_id: accountId,
+      p_display_name: displayName,
+    })
+    .single()
+  throwIfError(error)
+  if (!data) throw new Error("계정 이름 수정 결과를 불러오지 못했습니다.")
+
+  try {
+    const sessionResult = await supabase.auth.getSession()
+    if (sessionResult.data.session?.user.id === accountId) {
+      await supabase.auth.refreshSession()
+    }
+  } catch {
+    // The server-side profile update already succeeded. A later auth event or
+    // reload will reconcile the current account name if refresh is offline.
+  }
+
+  const row = data as {
+    display_name?: unknown
+    name_change_available?: unknown
+  }
+  return {
+    name: normalizeDisplayName(row.display_name) || displayName,
+    canChangeName: Boolean(row.name_change_available),
+  }
+}
+
+export async function deleteManagedAccount(accountId: string): Promise<void> {
+  const supabase = await requiredClient()
+  const normalizedAccountId = accountId.trim().toLowerCase()
+  if (!UUID_PATTERN.test(normalizedAccountId)) {
+    throw new Error("삭제할 계정 정보를 확인하지 못했습니다.")
+  }
+
+  const prepareResult = await supabase
+    .rpc(PREPARE_MANAGED_ACCOUNT_DELETE_RPC, {
+      p_target_user_id: normalizedAccountId,
+    })
+    .single()
+  if (prepareResult.error) {
+    // A finalize response can be lost after the transaction committed. A retry
+    // then sees no target account and is safely treated as already complete.
+    if (String((prepareResult.error as any).code ?? "") === "P0002") return
+    throw prepareResult.error
+  }
+
+  const prepareData = prepareResult.data as {
+    delete_ticket_id?: unknown
+    storage_objects?: unknown
+  } | null
+  const deleteTicketId = String(prepareData?.delete_ticket_id ?? "")
+    .trim()
+    .toLowerCase()
+  if (!UUID_PATTERN.test(deleteTicketId)) {
+    throw new Error("계정 삭제 준비 정보를 확인하지 못했습니다.")
+  }
+
+  const rawObjects: unknown[] = Array.isArray(prepareData?.storage_objects)
+    ? prepareData.storage_objects
+    : []
+  const objectsByBucket = new Map<string, string[]>()
+  let snapshotError: unknown = null
+
+  for (const rawObject of rawObjects) {
+    if (!rawObject || typeof rawObject !== "object") {
+      snapshotError = new Error(
+        "계정 파일 삭제 준비 정보를 확인하지 못했습니다.",
+      )
+      break
+    }
+    const row = rawObject as { bucket_id?: unknown; object_path?: unknown }
+    // Bucket IDs and object paths are case-sensitive. Use the exact values
+    // issued by the server ticket without trimming or normalization.
+    const bucketId = typeof row.bucket_id === "string" ? row.bucket_id : ""
+    const objectPath =
+      typeof row.object_path === "string" ? row.object_path : ""
+    if (!bucketId || !objectPath) {
+      snapshotError = new Error(
+        "계정 파일 삭제 준비 정보를 확인하지 못했습니다.",
+      )
+      break
+    }
+    const bucketPaths = objectsByBucket.get(bucketId) ?? []
+    if (!bucketPaths.includes(objectPath)) bucketPaths.push(objectPath)
+    objectsByBucket.set(bucketId, bucketPaths)
+  }
+
+  let storageError: unknown = snapshotError
+  if (!snapshotError) {
+    for (const [bucketId, objectPaths] of objectsByBucket) {
+      for (
+        let offset = 0;
+        offset < objectPaths.length;
+        offset += STORAGE_DELETE_BATCH_SIZE
+      ) {
+        const batch = objectPaths.slice(
+          offset,
+          offset + STORAGE_DELETE_BATCH_SIZE,
+        )
+        try {
+          const result = await supabase.storage.from(bucketId).remove(batch)
+          if (!storageError && result.error) storageError = result.error
+        } catch (error) {
+          if (!storageError) storageError = error
+        }
+      }
+    }
+  }
+
+  // Finalize even after snapshot or Storage errors. The database verifies both
+  // the exact snapshot and any newly-created target-owned objects.
+  const deleteResult = await supabase.rpc(FINALIZE_MANAGED_ACCOUNT_DELETE_RPC, {
+    p_delete_ticket_id: deleteTicketId,
+  })
+  if (deleteResult.error) {
+    throw deleteResult.error
+  }
+  // A successful finalize proves no target-owned objects remain. A preceding
+  // Storage error was therefore a harmless lost/duplicate response.
+  void storageError
+}
+
 export async function signIn(
   email: string,
+
   password: string,
+
   name: string,
 ): Promise<SignInResult> {
   const displayName = normalizeDisplayName(name)
@@ -550,26 +696,35 @@ function mapQuestionAnswer(row: any): QuestionAnswer {
     questionId: String(row.question_id),
     content: String(row.content ?? ""),
     authorName: String(row.author_name ?? "사용자"),
+    isAnonymous: Boolean(row.is_anonymous),
     createdAt: String(row.created_at ?? ""),
   }
 }
 
 function questionImagePublicUrl(path: unknown): string {
-  const normalizedPath = String(path ?? "").trim().toLowerCase()
+  const normalizedPath = String(path ?? "")
+    .trim()
+    .toLowerCase()
   if (!QUESTION_IMAGE_PATH_PATTERN.test(normalizedPath)) return ""
   return `${SUPABASE_URL}/storage/v1/object/public/${QUESTION_IMAGE_BUCKET}/${encodeURIComponent(normalizedPath)}`
 }
 
 function mapQuestion(row: any): QuestionPost {
-  const imageUrls = (Array.isArray(row.image_paths) ? row.image_paths : [])
-    .map(questionImagePublicUrl)
-    .filter((url: string) => Boolean(url))
+  const imagePaths = (Array.isArray(row.image_paths) ? row.image_paths : [])
+    .map((path: unknown) =>
+      String(path ?? "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter((path: string) => QUESTION_IMAGE_PATH_PATTERN.test(path))
+  const imageUrls = imagePaths.map(questionImagePublicUrl)
 
   return {
     id: String(row.id),
     content: String(row.content ?? ""),
     authorName: String(row.author_name ?? "사용자"),
     isAnonymous: Boolean(row.is_anonymous),
+    imagePaths,
     imageUrls,
     createdAt: String(row.created_at ?? ""),
     answers: [],
@@ -580,16 +735,14 @@ export async function loadQuestionThreads(
   includePrivateAuthors = false,
 ): Promise<QuestionPost[]> {
   const supabase = await requiredClient()
-  const [initialQuestionsResult, answersResult] = await Promise.all([
+  const [initialQuestionsResult, initialAnswersResult] = await Promise.all([
     supabase
       .from(QUESTIONS_TABLE)
-      .select(
-        "id, content, author_name, is_anonymous, image_paths, created_at",
-      )
+      .select("id, content, author_name, is_anonymous, image_paths, created_at")
       .order("created_at", { ascending: false }),
     supabase
       .from(ANSWERS_TABLE)
-      .select("id, question_id, content, author_name, created_at")
+      .select("id, question_id, content, author_name, is_anonymous, created_at")
       .order("created_at", { ascending: true }),
   ])
   let questionRows: any[] = initialQuestionsResult.data ?? []
@@ -613,13 +766,48 @@ export async function loadQuestionThreads(
   }
   throwIfError(questionError)
 
-  throwIfError(answersResult.error)
+  let answerRows: any[] = initialAnswersResult.data ?? []
+  let answerError: unknown = initialAnswersResult.error
+  if (answerError && isMissingDatabaseObject(answerError)) {
+    const legacyAnswersResult = await supabase
+      .from(ANSWERS_TABLE)
+      .select("id, question_id, content, author_name, created_at")
+      .order("created_at", { ascending: true })
+    answerRows = legacyAnswersResult.data ?? []
+    answerError = legacyAnswersResult.error
+  }
+  throwIfError(answerError)
+
   const privateAuthors = new Map<string, { name: string; email: string }>()
+  const privateAnswerAuthors = new Map<
+    string,
+    { name: string; email: string }
+  >()
   if (includePrivateAuthors) {
-    const { data, error } = await supabase.rpc(QUESTION_AUTHORS_RPC)
-    if (error && !isMissingDatabaseObject(error)) throw error
-    for (const row of data ?? []) {
+    const [questionAuthorsResult, answerAuthorsResult] = await Promise.all([
+      supabase.rpc(QUESTION_AUTHORS_RPC),
+      supabase.rpc(ANSWER_AUTHORS_RPC),
+    ])
+    if (
+      questionAuthorsResult.error &&
+      !isMissingDatabaseObject(questionAuthorsResult.error)
+    ) {
+      throw questionAuthorsResult.error
+    }
+    if (
+      answerAuthorsResult.error &&
+      !isMissingDatabaseObject(answerAuthorsResult.error)
+    ) {
+      throw answerAuthorsResult.error
+    }
+    for (const row of questionAuthorsResult.data ?? []) {
       privateAuthors.set(String(row.question_id), {
+        name: normalizeDisplayName(row.author_name) || "사용자",
+        email: normalizeEmail(row.author_email),
+      })
+    }
+    for (const row of answerAuthorsResult.data ?? []) {
+      privateAnswerAuthors.set(String(row.answer_id), {
         name: normalizeDisplayName(row.author_name) || "사용자",
         email: normalizeEmail(row.author_email),
       })
@@ -627,10 +815,15 @@ export async function loadQuestionThreads(
   }
 
   const answersByQuestion = new Map<string, QuestionAnswer[]>()
-  for (const row of answersResult.data ?? []) {
+  for (const row of answerRows) {
     const answer = mapQuestionAnswer(row)
+    const privateAuthor = privateAnswerAuthors.get(answer.id)
     const current = answersByQuestion.get(answer.questionId) ?? []
-    current.push(answer)
+    current.push({
+      ...answer,
+      actualAuthorName: privateAuthor?.name,
+      authorEmail: privateAuthor?.email,
+    })
     answersByQuestion.set(answer.questionId, current)
   }
 
@@ -683,20 +876,34 @@ async function cleanupQuestionImageUploads(
 
   // Remove every reserved path, not only uploads that returned success. The
   // server may have stored an object even if its network response was lost.
-  try {
-    await supabase.storage.from(QUESTION_IMAGE_BUCKET).remove(reservedPaths)
-  } catch {
-    // The cancellation RPC below is the final source-of-truth check: it only
-    // cancels a reservation after confirming that no Storage object remains.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const { error } = await supabase.storage
+        .from(QUESTION_IMAGE_BUCKET)
+        .remove(reservedPaths)
+      if (!error) break
+    } catch {
+      // Retry once below. A lost upload response can still leave an object.
+    }
+    if (attempt === 0) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 200))
+    }
   }
 
-  try {
-    const { error } = await supabase.rpc(CANCEL_QUESTION_IMAGES_RPC, {
-      p_object_paths: reservedPaths,
-    })
-    if (error) return
-  } catch {
-    // The original submit error remains the useful message for the user.
+  // The cancellation RPC is the final source-of-truth check: it only cancels
+  // a reservation after confirming that no Storage object remains.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const { error } = await supabase.rpc(CANCEL_QUESTION_IMAGES_RPC, {
+        p_object_paths: reservedPaths,
+      })
+      if (!error) return
+    } catch {
+      // The original submit error remains the useful message for the user.
+    }
+    if (attempt === 0) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 200))
+    }
   }
 }
 
@@ -706,10 +913,14 @@ async function questionSubmitClient(
   const sessionClient = await requiredClient()
   const { data, error } = await sessionClient.auth.getSession()
   if (error || !data.session?.access_token) {
-    throw new Error("질문을 등록하는 동안 로그인이 해제되었습니다. 다시 시도해 주세요.")
+    throw new Error(
+      "질문을 등록하는 동안 로그인이 해제되었습니다. 다시 시도해 주세요.",
+    )
   }
   if (expectedUserId && data.session.user.id !== expectedUserId) {
-    throw new Error("질문을 등록하는 동안 계정이 변경되었습니다. 다시 시도해 주세요.")
+    throw new Error(
+      "질문을 등록하는 동안 계정이 변경되었습니다. 다시 시도해 주세요.",
+    )
   }
 
   // Freeze the submit to its starting account. Global sign-out or account
@@ -756,7 +967,9 @@ export async function createQuestion(
       }
 
       for (const [index, row] of (reservationResult.data ?? []).entries()) {
-        const path = String(row?.object_path ?? "").trim().toLowerCase()
+        const path = String(row?.object_path ?? "")
+          .trim()
+          .toLowerCase()
         const extension = QUESTION_IMAGE_EXTENSION_BY_TYPE[contentTypes[index]]
         if (
           !QUESTION_IMAGE_PATH_PATTERN.test(path) ||
@@ -782,7 +995,7 @@ export async function createQuestion(
       const { error } = await supabase.storage
         .from(QUESTION_IMAGE_BUCKET)
         .upload(path, file, {
-          cacheControl: "31536000",
+          cacheControl: "3600",
           contentType,
           upsert: false,
         })
@@ -802,9 +1015,7 @@ export async function createQuestion(
         is_anonymous: isAnonymous,
         image_paths: uploadedPaths,
       })
-      .select(
-        "id, content, author_name, is_anonymous, image_paths, created_at",
-      )
+      .select("id, content, author_name, is_anonymous, image_paths, created_at")
       .single()
 
     let questionData: any = initialResult.data
@@ -853,16 +1064,102 @@ export async function createQuestion(
 export async function createQuestionAnswer(
   questionId: string,
   content: string,
+  isAnonymous = false,
 ): Promise<QuestionAnswer> {
-  const { data, error } = await (await requiredClient())
+  const supabase = await requiredClient()
+  const initialResult = await supabase
     .from(ANSWERS_TABLE)
-    .insert({ question_id: questionId, content: content.trim() })
-    .select("id, question_id, content, author_name, created_at")
+    .insert({
+      question_id: questionId,
+      content: content.trim(),
+      is_anonymous: isAnonymous,
+    })
+    .select("id, question_id, content, author_name, is_anonymous, created_at")
     .single()
 
-  throwIfError(error)
-  if (!data) throw new Error("답변 저장 결과를 불러오지 못했습니다.")
-  return mapQuestionAnswer(data)
+  let answerData: any = initialResult.data
+  let answerError: unknown = initialResult.error
+  if (answerError && isMissingDatabaseObject(answerError)) {
+    if (isAnonymous) {
+      throw new Error(
+        "익명 답변 기능을 사용하려면 최신 Supabase 스키마를 먼저 적용해 주세요.",
+      )
+    }
+    const legacyResult = await supabase
+      .from(ANSWERS_TABLE)
+      .insert({ question_id: questionId, content: content.trim() })
+      .select("id, question_id, content, author_name, created_at")
+      .single()
+    answerData = legacyResult.data
+    answerError = legacyResult.error
+  }
+
+  throwIfError(answerError)
+  if (!answerData) throw new Error("답변 저장 결과를 불러오지 못했습니다.")
+  return mapQuestionAnswer(answerData)
+}
+
+export async function deleteQuestion(questionId: string): Promise<void> {
+  const supabase = await requiredClient()
+  const normalizedQuestionId = questionId.trim().toLowerCase()
+  if (!UUID_PATTERN.test(normalizedQuestionId)) {
+    throw new Error("삭제할 질문 정보를 확인하지 못했습니다.")
+  }
+
+  // The server is the sole source of truth for the paths authorized for this
+  // question deletion.
+  const prepareResult = await supabase
+    .rpc(PREPARE_QUESTION_DELETE_RPC, {
+      p_question_id: normalizedQuestionId,
+    })
+    .single()
+  throwIfError(prepareResult.error)
+
+  const prepareData = prepareResult.data as {
+    delete_ticket_id?: unknown
+    object_paths?: unknown
+  } | null
+  const deleteTicketId = String(prepareData?.delete_ticket_id ?? "")
+    .trim()
+    .toLowerCase()
+  const rawPaths: unknown[] = Array.isArray(prepareData?.object_paths)
+    ? prepareData.object_paths
+    : []
+  const safePaths = rawPaths
+    .map((path: unknown) =>
+      String(path ?? "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter((path: string) => QUESTION_IMAGE_PATH_PATTERN.test(path))
+  if (
+    !UUID_PATTERN.test(deleteTicketId) ||
+    safePaths.length !== rawPaths.length ||
+    safePaths.length > QUESTION_IMAGE_MAX_COUNT ||
+    new Set(safePaths).size !== safePaths.length
+  ) {
+    throw new Error("질문 삭제 준비 정보를 확인하지 못했습니다.")
+  }
+
+  let storageError: unknown = null
+  if (safePaths.length) {
+    try {
+      const result = await supabase.storage
+        .from(QUESTION_IMAGE_BUCKET)
+        .remove(safePaths)
+      storageError = result.error
+    } catch (error) {
+      storageError = error
+    }
+  }
+
+  const deleteResult = await supabase.rpc(FINALIZE_QUESTION_DELETE_RPC, {
+    p_delete_ticket_id: deleteTicketId,
+  })
+  if (deleteResult.error) {
+    if (storageError) throw storageError
+    throw deleteResult.error
+  }
 }
 
 export async function loadInventoryEdits(): Promise<InventoryEdits> {
@@ -898,18 +1195,22 @@ export async function loadInventoryEdits(): Promise<InventoryEdits> {
 
 export async function saveInventoryEdit(
   itemId: string,
+
   fieldName: keyof InventoryEdits[string],
+
   fieldValue: string,
 ): Promise<void> {
-  const { error } = await (await requiredClient()).from(INVENTORY_EDITS_TABLE).upsert(
-    {
-      item_id: itemId,
-      field_name: fieldName,
-      field_value: fieldValue,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "item_id,field_name" },
-  )
+  const { error } = await (await requiredClient())
+    .from(INVENTORY_EDITS_TABLE)
+    .upsert(
+      {
+        item_id: itemId,
+        field_name: fieldName,
+        field_value: fieldValue,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "item_id,field_name" },
+    )
   throwIfError(error)
 }
 

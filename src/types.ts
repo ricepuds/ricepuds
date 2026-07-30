@@ -70,6 +70,9 @@ export interface QuestionAnswer {
   questionId: string
   content: string
   authorName: string
+  isAnonymous: boolean
+  actualAuthorName?: string
+  authorEmail?: string
   createdAt: string
 }
 
@@ -78,6 +81,7 @@ export interface QuestionPost {
   content: string
   authorName: string
   isAnonymous: boolean
+  imagePaths: string[]
   imageUrls: string[]
   actualAuthorName?: string
   authorEmail?: string
@@ -94,12 +98,14 @@ export interface AuthUser {
 }
 
 export interface AccountListItem {
+  id: string
   name: string
   email: string
   createdAt: string
   lastSignInAt: string | null
   canChangeName: boolean
   isAdmin: boolean
+  canDelete: boolean
 }
 
 export interface ToastMessage {

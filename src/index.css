@@ -3309,6 +3309,101 @@ button:disabled {
   text-align: right;
 }
 
+.account-record-actions {
+  display: flex;
+  margin-top: 13px;
+  padding-top: 12px;
+  justify-content: flex-end;
+  gap: 7px;
+  border-top: 1px solid var(--border);
+}
+
+.account-record-actions button,
+.account-record-edit button,
+.account-record-delete button {
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface-solid));
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.account-record-actions button.is-danger {
+  background: color-mix(in srgb, var(--red) 9%, var(--surface-solid));
+  color: var(--red);
+}
+
+.account-record-edit,
+.account-record-delete {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-solid);
+}
+
+.account-record-edit label,
+.account-record-delete label {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.account-record-edit input,
+.account-record-delete input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.account-record-edit > div,
+.account-record-delete > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.account-record-edit > div button:last-child {
+  background: var(--blue);
+  color: white;
+}
+
+.account-record-delete {
+  border-color: color-mix(in srgb, var(--red) 25%, var(--border));
+  background: color-mix(in srgb, var(--red) 5%, var(--surface-solid));
+}
+
+.account-record-delete strong {
+  color: var(--red);
+  font-size: 11px;
+}
+
+.account-record-delete p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.account-record-delete code {
+  overflow-wrap: anywhere;
+  color: var(--red);
+  font-size: 10px;
+}
+
+.account-record-delete > div button:last-child {
+  background: var(--red);
+  color: white;
+}
+
 .account-list-state {
   display: grid;
   min-height: 260px;
@@ -3460,6 +3555,11 @@ button:disabled {
     width: 100%;
     justify-content: flex-start;
     padding-left: 53px;
+  }
+
+  .account-record-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
@@ -3626,10 +3726,16 @@ button:disabled {
   color: var(--blue);
   font-size: 13px;
   font-weight: 800;
+  cursor: pointer;
 }
 
-.question-image-add:hover:not(:disabled) {
+.question-image-add:hover:not(.is-disabled) {
   background: color-mix(in srgb, var(--blue) 14%, var(--surface-solid));
+}
+
+.question-image-add.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .question-image-add > span {
@@ -3923,13 +4029,67 @@ button:disabled {
 }
 
 .question-answer-count {
-  margin-left: auto;
   padding: 5px 8px;
   border-radius: 999px;
   background: var(--surface-secondary);
   color: var(--text-secondary);
   font-size: 9px;
   font-weight: 750;
+}
+
+.question-thread-header > .question-thread-actions {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.question-delete-button {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.question-delete-confirm {
+  display: flex;
+  margin: 11px 0 0 44px;
+  padding: 10px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 24%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--red) 6%, var(--surface-solid));
+}
+
+.question-delete-confirm p {
+  margin: 0;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.question-delete-confirm > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.question-delete-confirm button {
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.question-delete-confirm button:last-child {
+  background: var(--red);
+  color: white;
 }
 
 .question-message {
@@ -4021,6 +4181,16 @@ button:disabled {
   font-size: 10px;
 }
 
+.answer-admin-author {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--orange);
+  font-size: 9px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .answer-meta time {
   margin-left: auto;
 }
@@ -4054,7 +4224,36 @@ button:disabled {
   font-size: 11px;
 }
 
-.answer-composer button,
+.answer-composer-footer {
+  gap: 10px;
+}
+
+.answer-composer-footer > .answer-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.answer-composer-footer > .answer-anonymous-option {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.answer-anonymous-option small {
+  max-width: 300px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.answer-composer-footer > .answer-composer-actions > span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-composer-footer > .answer-composer-actions > button,
 .answer-login-button {
   padding: 7px 11px;
   border-radius: 9px;
@@ -4302,6 +4501,10 @@ button:disabled {
     margin-left: 0;
   }
 
+  .question-delete-confirm {
+    margin-left: 0;
+  }
+
   .answer-list,
   .answer-empty,
   .answer-composer {
@@ -4355,15 +4558,39 @@ button:disabled {
     flex-wrap: wrap;
   }
 
-  .question-answer-count {
+  .question-thread-header > .question-thread-actions {
     width: 100%;
     margin-left: 44px;
+    justify-content: space-between;
+  }
+
+  .question-answer-count {
+    width: auto;
+    margin-left: 0;
   }
 
   .answer-list,
   .answer-empty,
   .answer-composer {
     margin-left: 0;
+  }
+
+  .answer-composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .answer-composer-footer > .answer-composer-actions {
+    justify-content: space-between;
+  }
+
+  .question-delete-confirm {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .question-delete-confirm > div {
+    justify-content: flex-end;
   }
 }
 

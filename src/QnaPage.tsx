@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   createQuestion,
   createQuestionAnswer,
+  deleteQuestion,
   loadQuestionThreads,
   type QuestionSubmitStage,
 } from "./supabase"
@@ -78,13 +79,20 @@ export default function QnaPage({
   const [questionImages, setQuestionImages] = useState<QuestionImageDraft[]>([])
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
+  const [anonymousAnswers, setAnonymousAnswers] =
+    useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<QuestionLoadError>("")
   const [processingImages, setProcessingImages] = useState(false)
-  const [questionSubmitStage, setQuestionSubmitStage] = useState<
-    "idle" | QuestionSubmitStage
-  >("idle")
+  const [questionSubmitStage, setQuestionSubmitStage] =
+    useState<"idle" | QuestionSubmitStage>("idle")
   const [submittingAnswer, setSubmittingAnswer] = useState<string | null>(null)
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(
+    null,
+  )
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(
+    null,
+  )
   const loadRequestRef = useRef(0)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const imageProcessRequestRef = useRef(0)
@@ -145,9 +153,7 @@ export default function QnaPage({
     } catch (error) {
       if (requestId !== imageProcessRequestRef.current) return
       onToast(
-        error instanceof Error
-          ? error.message
-          : "사진을 처리하지 못했습니다.",
+        error instanceof Error ? error.message : "사진을 처리하지 못했습니다.",
         "error",
       )
     } finally {
@@ -216,6 +222,9 @@ export default function QnaPage({
       clearQuestionImages()
       setIsAnonymous(false)
       setAnswerDrafts({})
+      setAnonymousAnswers({})
+      setDeleteCandidateId(null)
+      setDeletingQuestionId(null)
     }
     previousUserIdRef.current = nextUserId
   }, [clearQuestionImages, user?.id])
@@ -262,10 +271,10 @@ export default function QnaPage({
       setQuestions((current) => [
         submitUser.isAdmin && isAnonymous
           ? {
-              ...created,
-              actualAuthorName: submitUser.name,
-              authorEmail: submitUser.email,
-            }
+            ...created,
+            actualAuthorName: submitUser.name,
+            authorEmail: submitUser.email,
+          }
           : created,
         ...current,
       ])
@@ -302,25 +311,73 @@ export default function QnaPage({
 
     setSubmittingAnswer(questionId)
     try {
-      const created = await createQuestionAnswer(questionId, content)
+      const submitAnonymously = Boolean(anonymousAnswers[questionId])
+      const created = await createQuestionAnswer(
+        questionId,
+        content,
+        submitAnonymously,
+      )
       loadRequestRef.current += 1
       setLoading(false)
       setQuestions((current) =>
         current.map((question) =>
           question.id === questionId
             ? {
-                ...question,
-                answers: [...question.answers, created],
-              }
+              ...question,
+
+              answers: [
+                ...question.answers,
+                user.isAdmin && submitAnonymously
+                  ? {
+                    ...created,
+                    actualAuthorName: user.name,
+                    authorEmail: user.email,
+                  }
+                  : created,
+              ],
+            }
             : question,
         ),
       )
       setAnswerDrafts((current) => ({ ...current, [questionId]: "" }))
+      setAnonymousAnswers((current) => ({
+        ...current,
+        [questionId]: false,
+      }))
       onToast("답변을 등록했습니다.", "success")
-    } catch {
-      onToast("답변을 서버에 저장하지 못했습니다.", "error")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      onToast(
+        message.startsWith("익명 답변")
+          ? message
+          : "답변을 서버에 저장하지 못했습니다.",
+        "error",
+      )
     } finally {
       setSubmittingAnswer(null)
+    }
+  }
+
+  const handleQuestionDelete = async (question: QuestionPost) => {
+    if (!user?.isAdmin || deletingQuestionId) return
+
+    setDeletingQuestionId(question.id)
+    try {
+      await deleteQuestion(question.id)
+      loadRequestRef.current += 1
+      setQuestions((current) =>
+        current.filter((candidate) => candidate.id !== question.id),
+      )
+      setDeleteCandidateId(null)
+      onToast("질문과 답변을 삭제했습니다.", "success")
+    } catch {
+      void loadQuestions()
+      onToast(
+        "질문 삭제를 완료하지 못했습니다. 목록을 새로 확인했으니 다시 시도해 주세요.",
+        "error",
+      )
+    } finally {
+      setDeletingQuestionId(null)
     }
   }
 
@@ -373,25 +430,31 @@ export default function QnaPage({
                   aria-describedby="question-image-help"
                   aria-label="질문 사진 선택"
                   className="sr-only"
-                  disabled={processingImages || submittingQuestion}
-                  multiple
-                  onChange={(event) =>
-                    void handleQuestionImageSelection(event)
-                  }
-                  ref={imageInputRef}
-                  tabIndex={-1}
-                  type="file"
-                />
-                <button
-                  aria-describedby="question-image-help"
-                  className="question-image-add"
                   disabled={
                     processingImages ||
                     submittingQuestion ||
                     questionImages.length >= QUESTION_IMAGE_MAX_COUNT
                   }
-                  onClick={() => imageInputRef.current?.click()}
-                  type="button"
+                  id="question-image-input"
+                  multiple
+                  onChange={(event) => void handleQuestionImageSelection(event)}
+                  ref={imageInputRef}
+                  type="file"
+                />
+                <label
+                  aria-describedby="question-image-help"
+                  aria-disabled={
+                    processingImages ||
+                    submittingQuestion ||
+                    questionImages.length >= QUESTION_IMAGE_MAX_COUNT
+                  }
+                  className={`question-image-add${processingImages ||
+                      submittingQuestion ||
+                      questionImages.length >= QUESTION_IMAGE_MAX_COUNT
+                      ? " is-disabled"
+                      : ""
+                    }`}
+                  htmlFor="question-image-input"
                 >
                   <span aria-hidden="true">▧</span>
                   {processingImages
@@ -399,9 +462,9 @@ export default function QnaPage({
                     : questionImages.length >= QUESTION_IMAGE_MAX_COUNT
                       ? "사진 3장 첨부됨"
                       : "사진 첨부"}
-                </button>
+                </label>
                 <p id="question-image-help">
-                  JPG·PNG·WebP · 장당 5MB · 최대 3장 · 위치정보 제거 후 업로드
+                  휴대폰 HEIC·AVIF 포함 · 원본 30MB까지 · 자동 압축 · 최대 3장
                 </p>
               </div>
 
@@ -435,9 +498,8 @@ export default function QnaPage({
                     <button
                       aria-describedby="anonymous-question-note"
                       aria-pressed={isAnonymous}
-                      className={`question-anonymous-toggle${
-                        isAnonymous ? " is-active" : ""
-                      }`}
+                      className={`question-anonymous-toggle${isAnonymous ? " is-active" : ""
+                        }`}
                       disabled={submittingQuestion}
                       onClick={() => setIsAnonymous((current) => !current)}
                       type="button"
@@ -448,7 +510,8 @@ export default function QnaPage({
                       익명으로 질문
                     </button>
                     <small id="anonymous-question-note">
-                      다른 사용자에게 익명이며 관리자는 작성자를 확인할 수 있어요.
+                      다른 사용자에게 익명이며 관리자는 작성자를 확인할 수
+                      있어요.
                     </small>
                   </div>
                   <span>
@@ -573,9 +636,21 @@ export default function QnaPage({
                         {formatDate(question.createdAt)}
                       </time>
                     </div>
-                    <span className="question-answer-count">
-                      답변 {question.answers.length.toLocaleString("ko-KR")}개
-                    </span>
+                    <div className="question-thread-actions">
+                      <span className="question-answer-count">
+                        답변 {question.answers.length.toLocaleString("ko-KR")}개
+                      </span>
+                      {user?.isAdmin && (
+                        <button
+                          className="question-delete-button"
+                          disabled={Boolean(deletingQuestionId)}
+                          onClick={() => setDeleteCandidateId(question.id)}
+                          type="button"
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
                   </header>
 
                   <div className="question-message">
@@ -600,25 +675,70 @@ export default function QnaPage({
                     )}
                   </div>
 
+                  {user?.isAdmin && deleteCandidateId === question.id && (
+                    <div className="question-delete-confirm" role="alert">
+                      <p>이 질문과 첨부 사진, 등록된 답변을 모두 삭제할까요?</p>
+                      <div>
+                        <button
+                          disabled={deletingQuestionId === question.id}
+                          onClick={() => setDeleteCandidateId(null)}
+                          type="button"
+                        >
+                          취소
+                        </button>
+                        <button
+                          disabled={deletingQuestionId === question.id}
+                          onClick={() => void handleQuestionDelete(question)}
+                          type="button"
+                        >
+                          {deletingQuestionId === question.id
+                            ? "삭제 중…"
+                            : "질문 삭제"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {question.answers.length > 0 ? (
                     <ol
                       aria-label={question.content + "의 답변"}
                       className="answer-list"
                     >
-                      {question.answers.map((answer) => (
-                        <li key={answer.id}>
-                          <div className="answer-meta">
-                            <span aria-hidden="true">
-                              {avatarLabel(answer.authorName)}
-                            </span>
-                            <strong>{answer.authorName}</strong>
-                            <time dateTime={answer.createdAt}>
-                              {formatDate(answer.createdAt)}
-                            </time>
-                          </div>
-                          <p>{answer.content}</p>
-                        </li>
-                      ))}
+                      {question.answers.map((answer) => {
+                        const publicAnswerName = answer.isAnonymous
+                          ? "익명"
+                          : answer.authorName
+
+                        return (
+                          <li key={answer.id}>
+                            <div className="answer-meta">
+                              <span aria-hidden="true">
+                                {avatarLabel(publicAnswerName)}
+                              </span>
+                              <strong>{publicAnswerName}</strong>
+                              {answer.isAnonymous && (
+                                <span className="question-anonymous-badge">
+                                  익명 답변
+                                </span>
+                              )}
+                              {user?.isAdmin &&
+                                answer.isAnonymous &&
+                                answer.actualAuthorName && (
+                                  <span className="answer-admin-author">
+                                    관리자 확인 · {answer.actualAuthorName}
+                                    {answer.authorEmail
+                                      ? ` (${answer.authorEmail})`
+                                      : ""}
+                                  </span>
+                                )}
+                              <time dateTime={answer.createdAt}>
+                                {formatDate(answer.createdAt)}
+                              </time>
+                            </div>
+                            <p>{answer.content}</p>
+                          </li>
+                        )
+                      })}
                     </ol>
                   ) : (
                     <p className="answer-empty">
@@ -652,22 +772,52 @@ export default function QnaPage({
                         rows={2}
                         value={answerDraft}
                       />
-                      <div>
-                        <span>
-                          {answerDraft.length.toLocaleString("ko-KR")} /{" "}
-                          {ANSWER_LIMIT.toLocaleString("ko-KR")}
-                        </span>
-                        <button
-                          disabled={
-                            submittingAnswer === question.id ||
-                            !answerDraft.trim()
-                          }
-                          type="submit"
-                        >
-                          {submittingAnswer === question.id
-                            ? "등록 중…"
-                            : "답변 등록"}
-                        </button>
+                      <div className="answer-composer-footer">
+                        <div className="answer-anonymous-option">
+                          <button
+                            aria-describedby={`anonymous-answer-note-${question.id}`}
+                            aria-pressed={Boolean(
+                              anonymousAnswers[question.id],
+                            )}
+                            className={`question-anonymous-toggle${
+                              anonymousAnswers[question.id] ? " is-active" : ""
+                            }`}
+                            disabled={submittingAnswer === question.id}
+                            onClick={() =>
+                              setAnonymousAnswers((current) => ({
+                                ...current,
+                                [question.id]: !current[question.id],
+                              }))
+                            }
+                            type="button"
+                          >
+                            <span aria-hidden="true">
+                              <i />
+                            </span>
+                            익명으로 답변
+                          </button>
+                          <small id={`anonymous-answer-note-${question.id}`}>
+                            다른 사용자에게는 익명이며 관리자는 작성자를 확인할
+                            수 있어요.
+                          </small>
+                        </div>
+                        <div className="answer-composer-actions">
+                          <span>
+                            {answerDraft.length.toLocaleString("ko-KR")} /{" "}
+                            {ANSWER_LIMIT.toLocaleString("ko-KR")}
+                          </span>
+                          <button
+                            disabled={
+                              submittingAnswer === question.id ||
+                              !answerDraft.trim()
+                            }
+                            type="submit"
+                          >
+                            {submittingAnswer === question.id
+                              ? "등록 중…"
+                              : "답변 등록"}
+                          </button>
+                        </div>
                       </div>
                     </form>
                   ) : (
