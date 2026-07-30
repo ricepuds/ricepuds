@@ -92,6 +92,15 @@ export interface AuthUser {
   isAdmin: boolean
 }
 
+export interface AccountListItem {
+  name: string
+  email: string
+  createdAt: string
+  lastSignInAt: string | null
+  canChangeName: boolean
+  isAdmin: boolean
+}
+
 export interface ToastMessage {
   id: number
   text: string

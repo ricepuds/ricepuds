@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
+  AccountListItem,
   AuthUser,
   InventoryEdits,
   Notice,
@@ -35,6 +36,7 @@ export const ADMIN_EMAILS = [
   "2min095156@gmail.com",
   "stst5192@naver.com",
 ]
+export const ACCOUNT_LIST_VIEWER_EMAIL = "rices2114@gmail.com"
 
 const RESERVATIONS_TABLE = "science_lab_reservations"
 const RESERVATION_BLOCKS_TABLE = "science_lab_reservation_blocks"
@@ -45,6 +47,7 @@ const QUESTIONS_TABLE = "science_lab_questions"
 const ANSWERS_TABLE = "science_lab_answers"
 const SET_PROFILE_NAME_RPC = "set_my_science_lab_name"
 const QUESTION_AUTHORS_RPC = "get_science_lab_question_authors"
+const ACCOUNT_LIST_RPC = "get_science_lab_accounts"
 
 let clientPromise: Promise<SupabaseClient> | null = null
 
@@ -56,6 +59,10 @@ export function normalizeEmail(email: unknown): string {
 
 export function isAdminEmail(email: unknown): boolean {
   return ADMIN_EMAILS.includes(normalizeEmail(email))
+}
+
+export function canViewAccountList(email: unknown): boolean {
+  return normalizeEmail(email) === ACCOUNT_LIST_VIEWER_EMAIL
 }
 
 export function normalizeDisplayName(name: unknown): string {
@@ -241,6 +248,25 @@ export async function updateDisplayName(name: string): Promise<UserProfile> {
     name: normalizeDisplayName(row.display_name) || displayName,
     canChangeName: Boolean(row.name_change_available),
   }
+}
+
+export async function loadAccountList(): Promise<AccountListItem[]> {
+  const { data, error } = await (await requiredClient()).rpc(ACCOUNT_LIST_RPC)
+  throwIfError(error)
+
+  return (data ?? []).map((row: any) => {
+    const email = normalizeEmail(row.email)
+    return {
+      name: normalizeDisplayName(row.display_name) || "사용자",
+      email,
+      createdAt: String(row.created_at ?? ""),
+      lastSignInAt: row.last_sign_in_at
+        ? String(row.last_sign_in_at)
+        : null,
+      canChangeName: Boolean(row.name_change_available),
+      isAdmin: isAdminEmail(email),
+    }
+  })
 }
 
 export async function signIn(

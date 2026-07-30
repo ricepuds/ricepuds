@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AccountModal, AuthModal } from "./AuthModals"
+import AccountListPage from "./AccountListPage"
 import AdminDashboard from "./AdminDashboard"
 import CabinetViewer from "./CabinetViewer"
 import { AboutPage, HomePage } from "./HomeAbout"
@@ -16,6 +17,7 @@ import {
   type InventorySnapshot,
 } from "./inventory"
 import {
+  canViewAccountList,
   createNotice,
   createReservation,
   createReservationBlock,
@@ -45,7 +47,15 @@ import type {
   ToastMessage,
 } from "./types"
 
-type View = "home" | "inventory" | "survey" | "about" | "questions" | "admin" | "videos"
+type View =
+  | "home"
+  | "inventory"
+  | "survey"
+  | "about"
+  | "questions"
+  | "admin"
+  | "accounts"
+  | "videos"
 type ModalName = "auth" | "account" | "reservation" | null
 type Theme = "light" | "dark"
 type SyncStatus = "idle" | "syncing" | "success" | "partial" | "error"
@@ -110,6 +120,7 @@ function parseRoute(): { view: View; area: Area } {
   if (rawHash === "survey") return { view: "survey", area: "시약" }
   if (rawHash === "questions") return { view: "questions", area: "전체" }
   if (rawHash === "admin") return { view: "admin", area: "전체" }
+  if (rawHash === "accounts") return { view: "accounts", area: "전체" }
   if (rawHash === "videos") return { view: "videos", area: "전체" }
   if (rawHash === "about") return { view: "about", area: "전체" }
   return { view: "home", area: "전체" }
@@ -120,6 +131,7 @@ function routeHash(view: View, area: Area): string {
   if (view === "survey") return "#survey"
   if (view === "questions") return "#questions"
   if (view === "admin") return "#admin"
+  if (view === "accounts") return "#accounts"
   if (view === "videos") return "#videos"
   if (view === "about") return "#about"
   return window.location.pathname + window.location.search
@@ -135,11 +147,13 @@ function formatNow(): string {
 function Header({
   view,
   user,
+  canViewAccounts,
   theme,
   onHome,
   onSpaces,
   onInventory,
   onAdmin,
+  onAccounts,
   onVideos,
   onAbout,
   onQuestions,
@@ -150,11 +164,13 @@ function Header({
 }: {
   view: View
   user: AuthUser | null
+  canViewAccounts: boolean
   theme: Theme
   onHome: () => void
   onSpaces: () => void
   onInventory: () => void
   onAdmin: () => void
+  onAccounts: () => void
   onVideos: () => void
   onAbout: () => void
   onQuestions: () => void
@@ -248,6 +264,15 @@ function Header({
               관리
             </button>
           )}
+          {canViewAccounts && (
+            <button
+              className={view === "accounts" ? "is-active" : ""}
+              onClick={onAccounts}
+              type="button"
+            >
+              계정 목록
+            </button>
+          )}
           <button className={view === "videos" ? "is-active" : ""} onClick={onVideos} type="button">영상</button>
         </nav>
 
@@ -322,6 +347,7 @@ function Header({
                 ["분류표", onInventory],
                 ["예약", onReservation],
                 ...(user?.isAdmin ? [["관리자", onAdmin]] : []),
+                ...(canViewAccounts ? [["계정 목록", onAccounts]] : []),
                 ["영상", onVideos],
               ].map(([label, action]) => (
                 <button
@@ -458,6 +484,7 @@ export default function App() {
     return saved === "dark" ? "dark" : "light"
   })
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [authReady, setAuthReady] = useState(false)
   const [snapshot, setSnapshot] = useState<InventorySnapshot>(() => ({
     reagents: STATIC_REAGENTS,
     labItems: STATIC_LAB_ITEMS,
@@ -480,6 +507,7 @@ export default function App() {
   const syncInFlight = useRef(false)
   const lastSyncError = useRef("")
   const pendingInventoryEdits = useRef<Record<string, string>>({})
+  const canViewAccounts = canViewAccountList(user?.email)
 
   const showToast = useCallback(
     (text: string, tone: "default" | "success" | "error" = "default") => {
@@ -538,14 +566,33 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     let requestId = 0
+    let appliedIdentity = ""
     const applySession = (session: AuthSession | null) => {
       const currentRequest = ++requestId
+      const nextIdentity = `${String(session?.user?.id ?? "")}:${String(
+        session?.user?.email ?? "",
+      ).toLowerCase()}`
+
+      if (nextIdentity !== appliedIdentity) {
+        appliedIdentity = nextIdentity
+        if (!cancelled) {
+          setUser(null)
+          setAuthReady(false)
+        }
+      }
+
       void resolveAuthUser(session)
         .then((nextUser) => {
-          if (!cancelled && currentRequest === requestId) setUser(nextUser)
+          if (!cancelled && currentRequest === requestId) {
+            setUser(nextUser)
+            setAuthReady(true)
+          }
         })
         .catch(() => {
-          if (!cancelled && currentRequest === requestId) setUser(null)
+          if (!cancelled && currentRequest === requestId) {
+            setUser(null)
+            setAuthReady(true)
+          }
         })
     }
 
@@ -955,6 +1002,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header
+        canViewAccounts={canViewAccounts}
+        onAccounts={() => navigate("accounts", "전체")}
         onAdmin={() => navigate("admin", "전체")}
         onVideos={() => navigate("videos", "전체")}
         onAbout={() => navigate("about", activeArea)}
@@ -1021,6 +1070,52 @@ export default function App() {
         />
       )}
       {view === "videos" && <VideoPage />}
+      {view === "accounts" &&
+        (!authReady ? (
+          <main className="admin-access-page" id="main-content">
+            <section
+              aria-live="polite"
+              className="ios-card admin-access-card"
+              role="status"
+            >
+              <span aria-hidden="true" className="button-spinner" />
+              <p className="eyebrow">Checking access</p>
+              <h1>계정 권한을 확인하고 있습니다.</h1>
+              <p>로그인 정보를 안전하게 확인한 뒤 계정 목록을 표시합니다.</p>
+            </section>
+          </main>
+        ) : canViewAccounts ? (
+          <AccountListPage />
+        ) : (
+          <main className="admin-access-page" id="main-content">
+            <section className="ios-card admin-access-card">
+              <span aria-hidden="true">⌁</span>
+              <p className="eyebrow">Owner only</p>
+              <h1>계정 목록 접근이 제한되었습니다.</h1>
+              <p>
+                계정 목록은 rices2114@gmail.com 계정으로 로그인했을 때만
+                확인할 수 있습니다.
+              </p>
+              {user ? (
+                <button
+                  className="button secondary"
+                  onClick={() => setModal("account")}
+                  type="button"
+                >
+                  현재 계정 관리
+                </button>
+              ) : (
+                <button
+                  className="button primary"
+                  onClick={() => setModal("auth")}
+                  type="button"
+                >
+                  전용 계정으로 로그인
+                </button>
+              )}
+            </section>
+          </main>
+        ))}
       {view === "admin" &&
         (user?.isAdmin ? (
           <AdminDashboard

@@ -298,6 +298,49 @@ begin
 end;
 $$;
 
+create or replace function public.get_science_lab_accounts()
+returns table (
+  display_name text,
+  email text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  name_change_available boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not exists (
+    select 1
+      from auth.users as requester
+     where requester.id = auth.uid()
+       and lower(coalesce(requester.email, '')) = 'rices2114@gmail.com'
+  ) then
+    raise exception using
+      errcode = '42501',
+      message = '계정 목록을 확인할 권한이 없습니다.';
+  end if;
+
+  return query
+  select
+    coalesce(
+      profile.display_name,
+      nullif(split_part(coalesce(account.email, ''), '@', 1), ''),
+      '사용자'
+    )::text,
+    coalesce(account.email, '')::text,
+    account.created_at,
+    account.last_sign_in_at,
+    coalesce(profile.name_change_available, false)
+  from auth.users as account
+  left join public.science_lab_profiles as profile
+    on profile.user_id = account.id
+  order by account.created_at desc;
+end;
+$$;
+
 create index if not exists science_lab_questions_created_at_idx
   on public.science_lab_questions (created_at desc);
 create index if not exists science_lab_answers_question_created_at_idx
@@ -342,6 +385,8 @@ revoke all on function public.set_my_science_lab_name(text) from public, anon, a
 grant execute on function public.set_my_science_lab_name(text) to authenticated;
 revoke all on function public.get_science_lab_question_authors() from public, anon, authenticated;
 grant execute on function public.get_science_lab_question_authors() to authenticated;
+revoke all on function public.get_science_lab_accounts() from public, anon, authenticated;
+grant execute on function public.get_science_lab_accounts() to authenticated;
 
 drop policy if exists "Users can read own science lab profile" on public.science_lab_profiles;
 create policy "Users can read own science lab profile"
