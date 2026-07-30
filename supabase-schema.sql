@@ -1104,12 +1104,12 @@ security definer
 set search_path = ''
 as $$
 declare
-  requester_id uuid := auth.uid();
+  current_requester_id uuid := auth.uid();
   target_question_id uuid;
   question_author_id uuid;
   question_image_paths text[];
 begin
-  if requester_id is null or not public.is_science_lab_admin() then
+  if current_requester_id is null or not public.is_science_lab_admin() then
     raise exception using errcode = '42501', message = '관리자만 질문을 삭제할 수 있습니다.';
   end if;
   if p_delete_ticket_id is null then
@@ -1122,7 +1122,7 @@ begin
     join public.science_lab_questions as question
       on question.id = ticket.question_id
    where ticket.ticket_id = p_delete_ticket_id
-     and ticket.requester_id = requester_id
+     and ticket.requester_id = current_requester_id
      and ticket.expires_at > now();
   if not found then
     raise exception using errcode = '42501', message = '질문 삭제 준비 정보가 없거나 만료되었습니다.';
@@ -1144,7 +1144,7 @@ begin
      and question.author_id = question_author_id
    where ticket.ticket_id = p_delete_ticket_id
      and ticket.question_id = target_question_id
-     and ticket.requester_id = requester_id
+     and ticket.requester_id = current_requester_id
      and ticket.expires_at > now()
    for update of ticket, question;
 
@@ -1507,14 +1507,14 @@ security definer
 set search_path = ''
 as $$
 declare
-  requester_id uuid := auth.uid();
-  target_user_id uuid;
-  target_email text;
+  current_requester_id uuid := auth.uid();
+  resolved_target_user_id uuid;
+  resolved_target_email text;
 begin
-  if requester_id is null or not exists (
+  if current_requester_id is null or not exists (
     select 1
       from auth.users as requester
-     where requester.id = requester_id
+     where requester.id = current_requester_id
        and lower(btrim(coalesce(requester.email, ''))) = 'rices2114@gmail.com'
   ) then
     raise exception using errcode = '42501', message = '계정을 삭제할 권한이 없습니다.';
@@ -1524,37 +1524,38 @@ begin
   end if;
 
   select ticket.target_user_id
-    into target_user_id
+    into resolved_target_user_id
     from public.science_lab_account_delete_tickets as ticket
    where ticket.ticket_id = p_delete_ticket_id
-     and ticket.requester_id = requester_id
+     and ticket.requester_id = current_requester_id
      and ticket.expires_at > now();
   if not found then
     raise exception using errcode = '42501', message = '계정 삭제 준비 정보가 없거나 만료되었습니다.';
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(target_user_id::text, 0)
+    pg_catalog.hashtextextended(resolved_target_user_id::text, 0)
   );
 
   select lower(btrim(coalesce(account.email, '')))
-    into target_email
+    into resolved_target_email
     from auth.users as account
-   where account.id = target_user_id
+   where account.id = resolved_target_user_id
    for update;
   if not found then
     raise exception using errcode = 'P0002', message = '삭제할 계정을 찾지 못했습니다.';
   end if;
-  if target_user_id = requester_id or target_email = 'rices2114@gmail.com' then
+  if resolved_target_user_id = current_requester_id
+     or resolved_target_email = 'rices2114@gmail.com' then
     raise exception using errcode = '42501', message = '소유자 계정은 삭제할 수 없습니다.';
   end if;
 
   perform 1
     from public.science_lab_account_delete_tickets as ticket
    where ticket.ticket_id = p_delete_ticket_id
-     and ticket.requester_id = requester_id
-     and ticket.target_user_id = target_user_id
-     and ticket.target_email = target_email
+     and ticket.requester_id = current_requester_id
+     and ticket.target_user_id = resolved_target_user_id
+     and ticket.target_email = resolved_target_email
      and ticket.expires_at > now()
    for update;
   if not found then
@@ -1575,15 +1576,15 @@ begin
   if exists (
     select 1
       from storage.objects as object
-     where object.owner_id = target_user_id::text
+     where object.owner_id = resolved_target_user_id::text
   ) then
     raise exception using errcode = 'P0001', message = '계정에 새 파일이 남아 있어 삭제할 수 없습니다.';
   end if;
 
   delete from public.science_lab_question_image_uploads as upload
-   where upload.owner_id = target_user_id;
+   where upload.owner_id = resolved_target_user_id;
   delete from auth.users as account
-   where account.id = target_user_id;
+   where account.id = resolved_target_user_id;
 end;
 $$;
 
