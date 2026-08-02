@@ -1,7 +1,11 @@
 export type Area = "시약" | "화학실" | "생명실" | "준비실" | "전체"
+
 export type LabArea = Exclude<Area, "전체">
+
 export type InventoryStatus = "normal" | "toxic" | "low"
+
 export type SortKey = "id" | "area" | "category" | "name" | "location"
+
 export type ReservationStatus = "pending" | "approved" | "rejected"
 
 export interface InventoryItem {
@@ -73,6 +77,7 @@ export interface QuestionAnswer {
   isAnonymous: boolean
   actualAuthorName?: string
   authorEmail?: string
+  authorStudentId?: string
   createdAt: string
 }
 
@@ -85,8 +90,14 @@ export interface QuestionPost {
   imageUrls: string[]
   actualAuthorName?: string
   authorEmail?: string
+  authorStudentId?: string
   createdAt: string
   answers: QuestionAnswer[]
+}
+
+export interface GuestIdentity {
+  studentId: string
+  name: string
 }
 
 export interface AuthUser {

@@ -68,8 +68,10 @@ on conflict (user_id) do nothing;
 
 create table if not exists public.science_lab_questions (
   id uuid primary key default gen_random_uuid(),
-  author_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_id uuid default auth.uid() references auth.users(id) on delete cascade,
   author_name text not null default '사용자',
+  guest_student_id text,
+  guest_name text,
   content text not null check (char_length(btrim(content)) between 1 and 500),
   is_anonymous boolean not null default false,
   image_paths text[] not null default '{}'::text[],
@@ -81,10 +83,34 @@ alter table public.science_lab_questions
 alter table public.science_lab_questions
   add column if not exists image_paths text[] not null default '{}'::text[];
 alter table public.science_lab_questions
+  add column if not exists guest_student_id text;
+alter table public.science_lab_questions
+  add column if not exists guest_name text;
+alter table public.science_lab_questions
+  alter column author_id drop not null;
+alter table public.science_lab_questions
   drop constraint if exists science_lab_questions_image_count_check;
 alter table public.science_lab_questions
   add constraint science_lab_questions_image_count_check
   check (cardinality(image_paths) between 0 and 3);
+alter table public.science_lab_questions
+  drop constraint if exists science_lab_questions_author_identity_check;
+alter table public.science_lab_questions
+  add constraint science_lab_questions_author_identity_check
+  check (
+    (
+      author_id is not null
+      and guest_student_id is null
+      and guest_name is null
+    )
+    or (
+      author_id is null
+      and guest_student_id ~ '^[0-9]{4,10}$'
+      and char_length(btrim(guest_name)) between 1 and 40
+      and not is_anonymous
+      and cardinality(image_paths) = 0
+    )
+  );
 
 insert into storage.buckets (
   id,
@@ -475,8 +501,10 @@ $$;
 create table if not exists public.science_lab_answers (
   id uuid primary key default gen_random_uuid(),
   question_id uuid not null references public.science_lab_questions(id) on delete cascade,
-  author_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_id uuid default auth.uid() references auth.users(id) on delete cascade,
   author_name text not null default '사용자',
+  guest_student_id text,
+  guest_name text,
   content text not null check (char_length(btrim(content)) between 1 and 1000),
   is_anonymous boolean not null default false,
   created_at timestamptz not null default now()
@@ -484,6 +512,29 @@ create table if not exists public.science_lab_answers (
 
 alter table public.science_lab_answers
   add column if not exists is_anonymous boolean not null default false;
+alter table public.science_lab_answers
+  add column if not exists guest_student_id text;
+alter table public.science_lab_answers
+  add column if not exists guest_name text;
+alter table public.science_lab_answers
+  alter column author_id drop not null;
+alter table public.science_lab_answers
+  drop constraint if exists science_lab_answers_author_identity_check;
+alter table public.science_lab_answers
+  add constraint science_lab_answers_author_identity_check
+  check (
+    (
+      author_id is not null
+      and guest_student_id is null
+      and guest_name is null
+    )
+    or (
+      author_id is null
+      and guest_student_id ~ '^[0-9]{4,10}$'
+      and char_length(btrim(guest_name)) between 1 and 40
+      and not is_anonymous
+    )
+  );
 
 -- 잘못 뒤바뀐 두 계정의 이름을 이메일 기준으로 정확히 교정하고,
 -- 프로필, 인증 메타데이터, 기존 공개 작성자명까지 동기화합니다.
@@ -585,9 +636,50 @@ as $$
 declare
   requester_id uuid := auth.uid();
   profile_name text;
+  cleaned_guest_student_id text;
+  cleaned_guest_name text;
 begin
   if requester_id is null then
-    raise exception using errcode = '42501', message = '로그인이 필요합니다.';
+    cleaned_guest_student_id := btrim(coalesce(new.guest_student_id, ''));
+    cleaned_guest_name := regexp_replace(
+      btrim(coalesce(new.guest_name, '')),
+      '\s+',
+      ' ',
+      'g'
+    );
+    if cleaned_guest_student_id !~ '^[0-9]{4,10}$' then
+      raise exception using errcode = '22023', message = '학번은 숫자 4~10자리로 입력해 주세요.';
+    end if;
+    if char_length(cleaned_guest_name) not between 1 and 40 then
+      raise exception using errcode = '22023', message = '이름은 1자 이상 40자 이하로 입력해 주세요.';
+    end if;
+    if cardinality(coalesce(new.image_paths, '{}'::text[])) <> 0 then
+      raise exception using errcode = '42501', message = '사진 첨부는 로그인한 사용자만 이용할 수 있습니다.';
+    end if;
+
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'science-lab-guest-question:' || cleaned_guest_student_id,
+        0
+      )
+    );
+    if (
+      select count(*)
+        from public.science_lab_questions as question
+       where question.author_id is null
+         and question.guest_student_id = cleaned_guest_student_id
+         and question.created_at > now() - interval '1 hour'
+    ) >= 5 then
+      raise exception using errcode = '54000', message = '비회원 질문은 시간당 5개까지 등록할 수 있습니다.';
+    end if;
+
+    new.author_id := null;
+    new.author_name := cleaned_guest_name;
+    new.guest_student_id := cleaned_guest_student_id;
+    new.guest_name := cleaned_guest_name;
+    new.is_anonymous := false;
+    new.image_paths := '{}'::text[];
+    return new;
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
@@ -679,6 +771,8 @@ begin
 
   new.author_id := requester_id;
   new.author_name := case when new.is_anonymous then '익명' else profile_name end;
+  new.guest_student_id := null;
+  new.guest_name := null;
   return new;
 end;
 $$;
@@ -725,9 +819,46 @@ as $$
 declare
   requester_id uuid := auth.uid();
   profile_name text;
+  cleaned_guest_student_id text;
+  cleaned_guest_name text;
 begin
   if requester_id is null then
-    raise exception using errcode = '42501', message = '로그인이 필요합니다.';
+    cleaned_guest_student_id := btrim(coalesce(new.guest_student_id, ''));
+    cleaned_guest_name := regexp_replace(
+      btrim(coalesce(new.guest_name, '')),
+      '\s+',
+      ' ',
+      'g'
+    );
+    if cleaned_guest_student_id !~ '^[0-9]{4,10}$' then
+      raise exception using errcode = '22023', message = '학번은 숫자 4~10자리로 입력해 주세요.';
+    end if;
+    if char_length(cleaned_guest_name) not between 1 and 40 then
+      raise exception using errcode = '22023', message = '이름은 1자 이상 40자 이하로 입력해 주세요.';
+    end if;
+
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'science-lab-guest-answer:' || cleaned_guest_student_id,
+        0
+      )
+    );
+    if (
+      select count(*)
+        from public.science_lab_answers as answer
+       where answer.author_id is null
+         and answer.guest_student_id = cleaned_guest_student_id
+         and answer.created_at > now() - interval '1 hour'
+    ) >= 10 then
+      raise exception using errcode = '54000', message = '비회원 답변은 시간당 10개까지 등록할 수 있습니다.';
+    end if;
+
+    new.author_id := null;
+    new.author_name := cleaned_guest_name;
+    new.guest_student_id := cleaned_guest_student_id;
+    new.guest_name := cleaned_guest_name;
+    new.is_anonymous := false;
+    return new;
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
@@ -751,6 +882,8 @@ begin
   new.author_id := requester_id;
   new.is_anonymous := coalesce(new.is_anonymous, false);
   new.author_name := case when new.is_anonymous then '익명' else profile_name end;
+  new.guest_student_id := null;
+  new.guest_name := null;
   return new;
 end;
 $$;
@@ -854,12 +987,14 @@ as $$
   );
 $$;
 
-create or replace function public.get_science_lab_question_authors()
+drop function if exists public.get_science_lab_question_authors();
+create function public.get_science_lab_question_authors()
 returns table (
   question_id uuid,
   author_id uuid,
   author_name text,
-  author_email text
+  author_email text,
+  author_student_id text
 )
 language plpgsql
 stable
@@ -875,8 +1010,9 @@ begin
   select
     question.id,
     question.author_id,
-    coalesce(profile.display_name, question.author_name, '사용자'),
-    coalesce(users.email, '')::text
+    coalesce(question.guest_name, profile.display_name, question.author_name, '사용자'),
+    coalesce(users.email, '')::text,
+    coalesce(question.guest_student_id, '')::text
   from public.science_lab_questions as question
   left join public.science_lab_profiles as profile
     on profile.user_id = question.author_id
@@ -886,12 +1022,14 @@ begin
 end;
 $$;
 
-create or replace function public.get_science_lab_answer_authors()
+drop function if exists public.get_science_lab_answer_authors();
+create function public.get_science_lab_answer_authors()
 returns table (
   answer_id uuid,
   author_id uuid,
   author_name text,
-  author_email text
+  author_email text,
+  author_student_id text
 )
 language plpgsql
 stable
@@ -907,14 +1045,15 @@ begin
   select
     answer.id,
     answer.author_id,
-    coalesce(profile.display_name, answer.author_name, '사용자'),
-    coalesce(users.email, '')::text
+    coalesce(answer.guest_name, profile.display_name, answer.author_name, '사용자'),
+    coalesce(users.email, '')::text,
+    coalesce(answer.guest_student_id, '')::text
   from public.science_lab_answers as answer
   left join public.science_lab_profiles as profile
     on profile.user_id = answer.author_id
   left join auth.users as users
     on users.id = answer.author_id
-  where answer.is_anonymous
+  where answer.is_anonymous or answer.author_id is null
   order by answer.created_at asc;
 end;
 $$;
@@ -969,14 +1108,17 @@ begin
     raise exception using errcode = 'P0002', message = '삭제할 질문을 찾지 못했습니다.';
   end if;
 
-  -- Account and question deletion always lock the author before the question.
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(question_author_id::text, 0)
-  );
-  if public.is_science_lab_account_deletion_pending(question_author_id) then
-    raise exception using
-      errcode = '55000',
-      message = '계정 삭제가 진행 중이라 질문 삭제를 새로 준비할 수 없습니다.';
+  -- Signed-in authors are locked before the question. Guest questions do not
+  -- have an auth account and therefore skip the account-deletion guard.
+  if question_author_id is not null then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(question_author_id::text, 0)
+    );
+    if public.is_science_lab_account_deletion_pending(question_author_id) then
+      raise exception using
+        errcode = '55000',
+        message = '계정 삭제가 진행 중이라 질문 삭제를 새로 준비할 수 없습니다.';
+    end if;
   end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('science-lab-question-delete:' || p_question_id::text, 0)
@@ -984,9 +1126,9 @@ begin
 
   select question.image_paths
    into question_image_paths
-    from public.science_lab_questions as question
+   from public.science_lab_questions as question
    where question.id = p_question_id
-     and question.author_id = question_author_id
+     and question.author_id is not distinct from question_author_id
    for update;
 
   if not found then
@@ -1072,9 +1214,11 @@ begin
     raise exception using errcode = '42501', message = '질문 삭제 준비 정보가 없거나 만료되었습니다.';
   end if;
 
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(question_author_id::text, 0)
-  );
+  if question_author_id is not null then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(question_author_id::text, 0)
+    );
+  end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('science-lab-question-delete:' || target_question_id::text, 0)
   );
@@ -1083,9 +1227,9 @@ begin
     into question_image_paths
     from public.science_lab_question_delete_tickets as ticket
     join public.science_lab_questions as question
-      on question.id = ticket.question_id
+     on question.id = ticket.question_id
      and question.image_paths = ticket.object_paths
-     and question.author_id = question_author_id
+     and question.author_id is not distinct from question_author_id
    where ticket.ticket_id = p_delete_ticket_id
      and ticket.question_id = target_question_id
      and ticket.requester_id = current_requester_id
@@ -1540,6 +1684,12 @@ create index if not exists science_lab_answers_question_created_at_idx
   on public.science_lab_answers (question_id, created_at asc);
 create index if not exists science_lab_answers_author_id_idx
   on public.science_lab_answers (author_id);
+create index if not exists science_lab_questions_guest_rate_idx
+  on public.science_lab_questions (guest_student_id, created_at desc)
+  where author_id is null;
+create index if not exists science_lab_answers_guest_rate_idx
+  on public.science_lab_answers (guest_student_id, created_at desc)
+  where author_id is null;
 create index if not exists science_lab_question_image_uploads_attached_question_idx
   on public.science_lab_question_image_uploads (attached_question_id)
   where attached_question_id is not null;
@@ -1565,6 +1715,10 @@ grant insert (content, is_anonymous, image_paths)
   on public.science_lab_questions to authenticated;
 grant insert (question_id, content, is_anonymous)
   on public.science_lab_answers to authenticated;
+grant insert (content, guest_student_id, guest_name)
+  on public.science_lab_questions to anon;
+grant insert (question_id, content, guest_student_id, guest_name)
+  on public.science_lab_answers to anon;
 
 revoke all on function public.create_science_lab_profile() from public, anon, authenticated;
 revoke all on function public.is_science_lab_account_deletion_pending(uuid) from public, anon, authenticated;
@@ -1627,6 +1781,19 @@ create policy "Authenticated users can create own questions"
   for insert
   to authenticated
   with check (auth.uid() = author_id);
+
+drop policy if exists "Guests can create identified questions" on public.science_lab_questions;
+create policy "Guests can create identified questions"
+  on public.science_lab_questions
+  for insert
+  to anon
+  with check (
+    author_id is null
+    and guest_student_id ~ '^[0-9]{4,10}$'
+    and char_length(btrim(guest_name)) between 1 and 40
+    and not is_anonymous
+    and cardinality(image_paths) = 0
+  );
 
 drop policy if exists "Authenticated users can upload question images" on storage.objects;
 create policy "Authenticated users can upload question images"
@@ -1728,6 +1895,18 @@ create policy "Authenticated users can create own answers"
   for insert
   to authenticated
   with check (auth.uid() = author_id);
+
+drop policy if exists "Guests can create identified answers" on public.science_lab_answers;
+create policy "Guests can create identified answers"
+  on public.science_lab_answers
+  for insert
+  to anon
+  with check (
+    author_id is null
+    and guest_student_id ~ '^[0-9]{4,10}$'
+    and char_length(btrim(guest_name)) between 1 and 40
+    and not is_anonymous
+  );
 
 notify pgrst, 'reload schema';
 
