@@ -24,4 +24,34 @@ export const SCIENCE_VIDEOS: ScienceVideo[] = [
     youtubeUrl: "https://www.youtube.com/watch?v=weEileLXEuI&t=638s",
     category: "기구 사용법",
   },
+  {
+    title: "메틸렌 블루 산화-환원 실험",
+    description: "메틸렌 블루의 산화·환원 반응을 관찰하는 실험 영상입니다.",
+    youtubeUrl: "https://youtube.com/shorts/ei-ohtDlbk0?feature=share",
+    category: "화학",
+  },
+  {
+    title: "이중슬릿 실험",
+    description: "이중슬릿을 통해 빛의 간섭 무늬를 확인하는 실험 영상입니다.",
+    youtubeUrl: "https://youtube.com/shorts/wOuT6JEw3m8?feature=share",
+    category: "물리",
+  },
+  {
+    title: "다이오드 실험",
+    description: "다이오드의 정류 특성을 확인하는 실험 영상입니다.",
+    youtubeUrl: "https://youtube.com/shorts/Gmb1DiVV7lU?feature=share",
+    category: "물리",
+  },
+  {
+    title: "중화 적정 실험",
+    description: "산과 염기의 중화 적정을 통해 종말점을 확인하는 실험 영상입니다.",
+    youtubeUrl: "https://youtube.com/shorts/s97UQajLo4Q?feature=share",
+    category: "화학",
+  },
+  {
+    title: "운동량 보존 법칙 확인 실험",
+    description: "충돌 전후의 운동량을 비교해 운동량 보존 법칙을 확인하는 실험 영상입니다.",
+    youtubeUrl: "https://youtube.com/shorts/uAbSUR9OWas?feature=share",
+    category: "물리",
+  },
 ]
