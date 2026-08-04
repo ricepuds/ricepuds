@@ -151,6 +151,11 @@ function isMissingDatabaseObject(error: unknown): boolean {
   )
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  return "code" in error && String(error.code ?? "") === "23505"
+}
+
 export function getSupabaseClient(): Promise<SupabaseClient> {
   if (!clientPromise) {
     clientPromise = import("@supabase/supabase-js")
@@ -1276,18 +1281,38 @@ export async function saveInventoryEdit(
   fieldName: keyof InventoryEdits[string],
   fieldValue: string,
 ): Promise<void> {
-  const { error } = await (await requiredClient())
-    .from(INVENTORY_EDITS_TABLE)
-    .upsert(
-      {
-        item_id: itemId,
-        field_name: fieldName,
+  const supabase = await requiredClient()
+  const updatedAt = new Date().toISOString()
+  const updateExisting = () =>
+    supabase
+      .from(INVENTORY_EDITS_TABLE)
+      .update({
         field_value: fieldValue,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "item_id,field_name" },
-    )
-  throwIfError(error)
+        updated_at: updatedAt,
+      })
+      .eq("item_id", itemId)
+      .eq("field_name", fieldName)
+      .select("item_id")
+
+  const updateResult = await updateExisting()
+  throwIfError(updateResult.error)
+  if (updateResult.data?.length) return
+
+  const { error: insertError } = await supabase
+    .from(INVENTORY_EDITS_TABLE)
+    .insert({
+      item_id: itemId,
+      field_name: fieldName,
+      field_value: fieldValue,
+      updated_at: updatedAt,
+    })
+
+  if (!insertError) return
+  if (!isUniqueViolation(insertError)) throw insertError
+
+  const retryResult = await updateExisting()
+  throwIfError(retryResult.error)
+  if (!retryResult.data?.length) throw insertError
 }
 
 function normalizeReservationStatus(value: unknown): ReservationStatus {

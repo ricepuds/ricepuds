@@ -1617,6 +1617,7 @@ grant select on public.science_lab_reservation_blocks to anon, authenticated;
 grant insert, delete on public.science_lab_reservation_blocks to authenticated;
 grant select on public.science_lab_inventory_edits to anon, authenticated;
 revoke update on public.science_lab_inventory_edits from anon, authenticated;
+revoke delete, truncate, references, trigger on public.science_lab_inventory_edits from anon;
 grant insert on public.science_lab_inventory_edits to anon;
 grant insert, delete on public.science_lab_inventory_edits to authenticated;
 grant update (field_value, updated_at) on public.science_lab_inventory_edits to anon, authenticated;
@@ -1747,18 +1748,21 @@ drop policy if exists "Anyone can read science lab inventory edits" on public.sc
 create policy "Anyone can read science lab inventory edits"
   on public.science_lab_inventory_edits
   for select
+  to anon, authenticated
   using (true);
 
 drop policy if exists "Admins can create science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Admins can create science lab inventory edits"
   on public.science_lab_inventory_edits
   for insert
+  to authenticated
   with check (public.is_science_lab_admin());
 
 drop policy if exists "Admins can update science lab inventory edits" on public.science_lab_inventory_edits;
 create policy "Admins can update science lab inventory edits"
   on public.science_lab_inventory_edits
   for update
+  to authenticated
   using (public.is_science_lab_admin())
   with check (public.is_science_lab_admin());
 
@@ -1779,6 +1783,7 @@ drop policy if exists "Admins can delete science lab inventory edits" on public.
 create policy "Admins can delete science lab inventory edits"
   on public.science_lab_inventory_edits
   for delete
+  to authenticated
   using (public.is_science_lab_admin());
 
 drop policy if exists "Anyone can read science lab questions" on public.science_lab_questions;
