@@ -39,6 +39,7 @@ const REMAINING_LEVELS = [
   "절반(25~75%)",
   "소량(25%미만)",
   "거의없음",
+  "소진",
   "수량미기록",
 ] as const
 const CUSTOM_QUANTITY_VALUE = "__custom_quantity__"

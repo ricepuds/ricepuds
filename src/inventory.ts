@@ -51,7 +51,7 @@ export interface InventorySnapshot {
 
 const REAGENT_SHEET = "시약 조사표"
 const LAB_ITEM_SHEET = "기구 목록"
-const LOW_STOCK_BUCKETS = new Set(["거의없음", "소량(25%미만)"])
+const LOW_STOCK_BUCKETS = new Set(["소진", "거의없음", "소량(25%미만)"])
 const VALID_LAB_AREAS = new Set<LabArea>(["화학실", "생명실", "준비실"])
 
 const SHEET_SOURCES: Record<string, SheetSource> = {
